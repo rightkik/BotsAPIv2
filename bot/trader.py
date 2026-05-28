@@ -180,7 +180,8 @@ def execute_signal(
     signal: dict,
     df,
     state: dict,
-    dry_run: bool = False
+    dry_run: bool = False,
+    symbol: str = None,
 ) -> dict:
     """
     ประมวลผล signal และส่ง order ถ้าเงื่อนไขครบ
@@ -203,17 +204,17 @@ def execute_signal(
     """
     action = signal.get("action", "HOLD")
 
+    sym = symbol or config.SYMBOL
+
     if action == "BUY":
         balance = get_balance(exchange, "USDT")
         if balance <= 0:
-            # Testnet balance ดึงไม่ได้ — ใช้ค่าสมมติเพื่อทดสอบ
             balance = 10000.0
             print(f"  ⚠️  ใช้ balance สมมติ ${balance:,.0f} (testnet permission)")
 
         atr_val = float(df['atr'].iloc[-2])
         price   = float(df['close'].iloc[-2])
 
-        # คำนวณ SL ก่อน แล้วค่อยคำนวณ size
         levels   = calculate_atr_sl_tp(price, atr_val, "long")
         quantity = calculate_position_size(balance, price, levels["sl"])
 
@@ -221,7 +222,7 @@ def execute_signal(
             print(f"  ⚠️  Position size = 0 — ข้าม BUY")
             return state
 
-        result = place_market_order(exchange, config.SYMBOL, "buy", quantity, dry_run)
+        result = place_market_order(exchange, sym, "buy", quantity, dry_run)
         if result is None:
             return state
 
@@ -230,6 +231,7 @@ def execute_signal(
 
         state.update({
             "in_position":     True,
+            "symbol":          sym,
             "direction":       "long",
             "entry_price":     fill_price,
             "quantity":        result["amount"],
@@ -242,14 +244,14 @@ def execute_signal(
             "atr_at_entry":    atr_val,
             "breakeven_moved": False,
         })
-        _save_state(state)
+        _save_state(state, symbol=sym)
 
     elif action == "SELL" or (action == "CLOSE" and state.get("in_position")):
         if not state.get("in_position"):
             return state
 
         quantity = state.get("quantity", 0)
-        result   = place_market_order(exchange, config.SYMBOL, "sell", quantity, dry_run)
+        result   = place_market_order(exchange, sym, "sell", quantity, dry_run)
         if result is None:
             return state
 
@@ -257,13 +259,11 @@ def execute_signal(
         entry_price = state.get("entry_price", fill_price)
         pnl         = (fill_price - entry_price) * quantity
 
-        # อัปเดต daily stats
-        balance      = get_balance(exchange, "USDT") or 10000.0
-        pnl_pct      = pnl / (entry_price * quantity)
-        daily_pnl    = state.get("daily_pnl_usdt", 0.0) + pnl
+        balance       = get_balance(exchange, "USDT") or 10000.0
+        pnl_pct       = pnl / (entry_price * quantity)
+        daily_pnl     = state.get("daily_pnl_usdt", 0.0) + pnl
         daily_pnl_pct = state.get("daily_pnl_pct", 0.0) + pnl_pct
 
-        # นับ consecutive losses
         cons_losses = state.get("consecutive_losses", 0)
         if pnl < 0:
             cons_losses += 1
@@ -288,7 +288,7 @@ def execute_signal(
         })
 
         check_daily_kill_switch(state)
-        _save_state(state)
+        _save_state(state, symbol=sym)
 
     return state
 
@@ -297,7 +297,8 @@ def check_and_update_trailing(
     exchange: ccxt.binance,
     current_price: float,
     state: dict,
-    dry_run: bool = False
+    dry_run: bool = False,
+    symbol: str = None,
 ) -> dict:
     """
     เรียกทุก loop เพื่อตรวจ breakeven และ SL/TP hit
@@ -319,14 +320,14 @@ def check_and_update_trailing(
         state["breakeven_moved"] = True
         print(f"  📍 ย้าย SL → Breakeven @ ${state['entry_price']:,.2f}"
               f"  (เดิม: ${old_sl:,.2f})")
-        _save_state(state)
+        _save_state(state, symbol=symbol)
 
     # ตรวจ SL/TP hit
     hit = check_sl_tp(current_price, state)
     if hit:
         print(f"\n  EXIT: {hit} hit @ ${current_price:,.2f}")
         close_signal = {"action": "CLOSE", "reason": hit, "strength": "NORMAL"}
-        state = execute_signal(exchange, close_signal, None, state, dry_run)
+        state = execute_signal(exchange, close_signal, None, state, dry_run, symbol=symbol)
         # log จาก execute_signal แล้ว
 
     return state
@@ -336,10 +337,19 @@ def check_and_update_trailing(
 # State Persistence
 # ===================================================
 
-def load_state(state_file: str = None) -> dict:
+def _state_file_for(symbol: str = None, state_file: str = None) -> str:
+    """คืน path ของ state file — per symbol ถ้าระบุ symbol"""
+    if state_file:
+        return state_file
+    if symbol:
+        safe = symbol.replace('/', '')
+        return config.STATE_FILE.replace('state.json', f'state_{safe}.json')
+    return config.STATE_FILE
+
+
+def load_state(symbol: str = None, state_file: str = None) -> dict:
     """โหลด bot state จาก JSON file"""
-    if state_file is None:
-        state_file = config.STATE_FILE
+    state_file = _state_file_for(symbol, state_file)
 
     default = {
         "in_position":        False,
@@ -377,10 +387,9 @@ def load_state(state_file: str = None) -> dict:
         return default
 
 
-def _save_state(state: dict, state_file: str = None) -> None:
+def _save_state(state: dict, symbol: str = None, state_file: str = None) -> None:
     """บันทึก state ลงไฟล์ JSON (overwrite ทุกครั้ง)"""
-    if state_file is None:
-        state_file = config.STATE_FILE
+    state_file = _state_file_for(symbol, state_file)
 
     os.makedirs(os.path.dirname(state_file), exist_ok=True)
     try:

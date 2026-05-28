@@ -107,7 +107,7 @@ def sync_to_candle_close(timeframe: str) -> None:
     wait_secs += 5
 
     print(f"\n  ⏱ รอแท่ง {timeframe} ถัดไป: {wait_secs}s  "
-          f"(ปิดตอน {datetime.utcfromtimestamp(next_close).strftime('%H:%M:%S')} UTC)")
+          f"(ปิดตอน {datetime.fromtimestamp(next_close, tz=timezone.utc).strftime('%H:%M:%S')} UTC)")
 
     try:
         for remaining in range(wait_secs, 0, -1):
@@ -143,89 +143,101 @@ def run_bot(exchange, dry_run: bool = False, verbose: bool = False) -> None:
 
     print(f"\n{'=' * 55}")
     print(f"  TRADING BOT STARTED  |  {mode_label}")
-    print(f"  Symbol    : {config.SYMBOL}")
-    print(f"  Strategy  : EMA{config.EMA_FAST}/EMA{config.EMA_SLOW} + ADX{config.ADX_THRESHOLD}")
+    print(f"  Symbols   : {', '.join(config.SYMBOLS)}")
+    print(f"  Strategy  : EMA{config.EMA_FAST}/EMA{config.EMA_SLOW} + ADX{config.ADX_THRESHOLD} + HTF({config.TIMEFRAME_HTF})")
     print(f"  SL/TP     : {config.ATR_SL_MULT}x ATR / {config.ATR_TP_MULT}x ATR")
     print(f"  Risk/Trade: {config.RISK_PER_TRADE*100:.0f}%  |  Kill Switch: {config.MAX_DAILY_LOSS_PCT*100:.0f}%/day")
     print(f"  Press Ctrl+C to stop")
     print(f"{'=' * 55}\n")
 
-    state      = load_state()
+    # โหลด state แยกต่อ symbol
+    states     = {sym: load_state(sym) for sym in config.SYMBOLS}
     loop_count = 0
 
     while True:
         loop_count += 1
-        print(f"\n--- Loop #{loop_count}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+        print(f"\n{'=' * 55}")
+        print(f"  Loop #{loop_count}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{'=' * 55}")
 
-        # --- 1. รีเซ็ต daily stats ---
-        state = reset_daily_stats(state)
+        for sym in config.SYMBOLS:
+            print(f"\n--- {sym} ---")
+            state = states[sym]
 
-        # --- 2. เช็ค kill switch resume ---
-        check_resume_time(state)
+            # --- 1. รีเซ็ต daily stats ---
+            state = reset_daily_stats(state)
 
-        # --- 3. ดึงข้อมูล OHLCV ---
-        df_main = get_ohlcv_ccxt(exchange, config.SYMBOL, config.TIMEFRAME_MAIN, limit=200)
-        if df_main is None:
-            print("❌ ดึงข้อมูล MAIN TF ไม่ได้ — ข้ามรอบนี้")
-            time.sleep(60)
-            continue
+            # --- 2. เช็ค kill switch resume ---
+            check_resume_time(state)
 
-        df_entry = get_ohlcv_ccxt(exchange, config.SYMBOL, config.TIMEFRAME_ENTRY, limit=100)
-        if df_entry is None:
-            print("⚠️  ดึงข้อมูล ENTRY TF ไม่ได้ — ใช้ MAIN TF อย่างเดียว")
-            df_entry = df_main.copy()
+            # --- 3. ดึงข้อมูล OHLCV ---
+            df_main = get_ohlcv_ccxt(exchange, sym, config.TIMEFRAME_MAIN, limit=200)
+            if df_main is None:
+                print(f"❌ ดึงข้อมูล {sym} MAIN TF ไม่ได้ — ข้ามรอบนี้")
+                states[sym] = state
+                continue
 
-        # --- 4. คำนวณ indicators ---
-        df_main  = add_all_indicators(df_main)
-        df_entry = add_all_indicators(df_entry)
+            df_entry = get_ohlcv_ccxt(exchange, sym, config.TIMEFRAME_ENTRY, limit=100)
+            if df_entry is None:
+                df_entry = df_main.copy()
 
-        # ดึงค่า indicator แท่งปิดล่าสุด (iloc[-2])
-        last      = df_main.iloc[-2]
-        price     = float(df_main['close'].iloc[-1])  # ราคาปัจจุบัน (แท่งล่าสุด)
-        indicators = {
-            'ema_fast': float(last['ema_fast']),
-            'ema_slow': float(last['ema_slow']),
-            'adx':      float(last['adx']),
-            'rsi':      float(last['rsi']),
-            'atr':      float(last['atr']),
-        }
+            df_htf = get_ohlcv_ccxt(exchange, sym, config.TIMEFRAME_HTF, limit=100)
 
-        # --- 5. ตรวจ trailing SL/TP/breakeven ก่อนเสมอ ---
-        state = check_and_update_trailing(exchange, price, state, dry_run)
+            # --- 4. คำนวณ indicators ---
+            df_main  = add_all_indicators(df_main)
+            df_entry = add_all_indicators(df_entry)
+            if df_htf is not None:
+                df_htf = add_all_indicators(df_htf)
 
-        # --- 6. เช็คว่าควรหยุดหรือเปล่า ---
-        if should_stop_bot(state):
-            _show_wait_and_resume(state)
-            continue
+            last      = df_main.iloc[-2]
+            price     = float(df_main['close'].iloc[-1])
+            indicators = {
+                'ema_fast': float(last['ema_fast']),
+                'ema_slow': float(last['ema_slow']),
+                'adx':      float(last['adx']),
+                'rsi':      float(last['rsi']),
+                'atr':      float(last['atr']),
+            }
 
-        # --- 7. Signal จาก MAIN TF ---
-        signal = get_signal(df_main, state)
+            # --- 5. ตรวจ trailing SL/TP/breakeven ก่อนเสมอ ---
+            state = check_and_update_trailing(exchange, price, state, dry_run, symbol=sym)
 
-        # --- 8. Multi-TF Confirmation: ถ้า STRONG → ยืนยันด้วย ENTRY TF ---
-        if signal['action'] in ("BUY", "SELL") and signal['strength'] == "STRONG":
-            entry_signal = get_signal(df_entry, {"in_position": False, "bot_active": True, "cooldown_bars": 0})
-            if entry_signal['action'] != signal['action']:
-                if verbose:
-                    print(f"  ⚠️  Multi-TF ไม่ confirm: MAIN={signal['action']}, "
-                          f"ENTRY={entry_signal['action']} — ลด strength เป็น NORMAL")
-                signal['strength'] = "NORMAL"
-                signal['reason']  += " (ENTRY TF ไม่ confirm)"
+            # --- 6. เช็คว่าควรหยุดหรือเปล่า ---
+            if should_stop_bot(state):
+                _show_wait_and_resume(state)
+                states[sym] = state
+                continue
 
-        # --- 9. Execute Signal ---
-        if signal['action'] in ("BUY", "SELL"):
-            state = execute_signal(exchange, signal, df_main, state, dry_run)
+            # --- 7. Signal จาก MAIN TF (+ HTF filter) ---
+            signal = get_signal(df_main, state, df_htf)
 
-        # --- 10. Log + Print Status ---
-        print_status(state, price, signal, indicators)
-        log_signal(signal, indicators, price)
-        log_state(state)
+            # --- 8. Multi-TF Confirmation ---
+            if signal['action'] in ("BUY", "SELL") and signal['strength'] == "STRONG":
+                entry_signal = get_signal(df_entry, {"in_position": False, "bot_active": True, "cooldown_bars": 0})
+                if entry_signal['action'] != signal['action']:
+                    if verbose:
+                        print(f"  ⚠️  Multi-TF ไม่ confirm: MAIN={signal['action']}, "
+                              f"ENTRY={entry_signal['action']} — ลด strength เป็น NORMAL")
+                    signal['strength'] = "NORMAL"
+                    signal['reason']  += " (ENTRY TF ไม่ confirm)"
 
-        if verbose:
-            print(f"\n  Reason: {signal['reason']}")
-            trend = get_trend_label(df_main)
-            print(f"  Trend:  {trend}")
+            # --- 9. Execute Signal ---
+            if signal['action'] in ("BUY", "SELL"):
+                state = execute_signal(exchange, signal, df_main, state, dry_run, symbol=sym)
 
-        # --- 11. รอแท่งถัดไป ---
+            # --- 10. Log + Print Status ---
+            print_status(state, price, signal, indicators, symbol=sym)
+            log_signal(signal, indicators, price)
+            log_state(state)
+
+            if verbose:
+                print(f"\n  Reason: {signal['reason']}")
+                trend = get_trend_label(df_main)
+                print(f"  Trend:  {trend}")
+
+            states[sym] = state
+
+        # --- 11. รอแท่งถัดไป (sync ครั้งเดียวสำหรับทุก symbol) ---
         try:
             print(f"\n  Trade log: {config.LOG_FILE}")
             sync_to_candle_close(config.TIMEFRAME_MAIN)

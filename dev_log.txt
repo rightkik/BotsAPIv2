@@ -175,34 +175,130 @@ LIBRARY INSTALLATION:
   py -m pip install ccxt ta plotly -q  ✅
 
 --------------------------------------------------------------------------------
+[2026-05-28]  Session 6 — Full System Test + Dashboard Fixes
+--------------------------------------------------------------------------------
+COMPLETED:
+  - pip install -r requirements.txt  (Python 3.13, ติดตั้งครบทุก package)
+  - ได้ Testnet API key จาก testnet.binance.vision → USDT balance $10,000
+  - รัน python main.py --test        ✅ connection + OHLCV + indicators
+  - รัน python main.py --dry-run     ✅ Box UI แสดงถูกต้อง signal HOLD
+  - รัน streamlit dashboard          ✅ UI ครบทุก section
+  - รัน python main.py (testnet)     ✅ bot loop จริง countdown รอแท่ง 1h
+  - รัน backtest --days 90           ✅ 2160 แท่ง ผล 5 trades / 0W-5L / -3.17%
+  - สร้าง test_order.py              ✅ force BUY+SELL testnet order สำเร็จ
+  - Trade History แสดงใน dashboard   ✅
+
+BUGS FIXED:
+  - DeprecationWarning: datetime.utcfromtimestamp() ใน main.py:110
+    → เปลี่ยนเป็น datetime.fromtimestamp(ts, tz=timezone.utc)
+  - Dashboard ATR card แสดง raw HTML (Streamlit ตีความ $ เป็น LaTeX)
+    → เปลี่ยน $ เป็น &#36; ใน st.markdown (app.py lines 339, 359, 360)
+  - Dashboard Trade History: AttributeError 'Styler' has no 'applymap'
+    → pandas 2.0+ rename เป็น .map() (app.py line 428)
+  - Dashboard header กินพื้นที่สูงเกิน
+    → inject CSS ลด block-container padding, display:none stHeader
+    → ลบ st.divider() ระหว่าง header และ metrics, ลด padding st.metric
+
+BACKTEST RESULTS (90 วัน):
+  Period   : 2026-02-27 ถึง 2026-05-28  (2160 แท่ง 1h)
+  Capital  : $10,000  →  Final: $9,682.86
+  PnL      : -$257.61 (-3.17%)  |  Trades: 5 (0W/5L)  |  Max DD: -3.17%
+  Sharpe   : -17.34
+  หมายเหตุ : ตลาด Bearish ต่อเนื่อง 90 วัน EMA crossover แพ้ใน downtrend
+
+NEW FILES:
+  test_order.py : force BUY+SELL บน testnet เพื่อเทส API (ไม่ใช่ bot จริง)
+
+--------------------------------------------------------------------------------
+CURRENT STATUS (2026-05-28)
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 7 — Timeframe Optimization
+--------------------------------------------------------------------------------
+CHANGE:
+  TIMEFRAME_MAIN  : 1h  → 15m  (config.py)
+  TIMEFRAME_ENTRY : 15m → 5m   (config.py)
+  Dashboard       : อัปเดตอัตโนมัติตาม config — refresh browser เห็น 15m ทันที
+
+BACKTEST COMPARISON (90 วัน, Bearish market):
+                    1h          15m
+  Trades          : 5           15
+  Win Rate        : 0%          26.7%
+  PnL             : -3.17%      -6.53%
+  Max Drawdown    : -3.17%      -8.14%
+  Sharpe Ratio    : -17.34      -2.84
+  Best Trade      : —           +$187.35
+  หมายเหตุ        : ทั้งคู่ขาดทุนเพราะตลาด Bearish 90 วัน
+                    15m จะได้เปรียบกว่าตอน Bull run (สัญญาณเร็วขึ้น 4x)
+
+--------------------------------------------------------------------------------
 CURRENT STATUS (2026-05-28)
 --------------------------------------------------------------------------------
 READY:
-  ✅ Connection test
+  ✅ Connection + API key (testnet $10,000 USDT)
   ✅ OHLCV data fetching (ccxt)
   ✅ All indicators (EMA, ADX, RSI, ATR, Zones)
-  ✅ Dry-run bot loop
-  ✅ Backtest engine
-  ✅ Dashboard code
+  ✅ Dry-run bot loop + Box UI
+  ✅ Backtest engine (30d / 90d)
+  ✅ Dashboard UI — ไม่มี error, Trade History แสดงถูกต้อง
+  ✅ Testnet order placement — BUY/SELL API ใช้ได้ปกติ
+  ✅ Bot รันจริงบน testnet (15m, รอ EMA crossover signal)
+  ✅ Dashboard แสดง 15m — restart streamlit แล้ว header อัปเดตถูกต้อง
+
+SNAPSHOT (2026-05-28 23:09):
+  TF    : 15m  |  Price: $72,943  |  Signal: HOLD
+  EMA20 : $73,125  <  EMA50: $73,406  (Bearish)
+  ADX   : 52.5  RSI: 42.9  ATR: $1,269
+  หมายเหตุ: ATR 15m ($1,269) น้อยกว่า 1h ($2,668) — ปกติ แท่งสั้นขยับน้อยกว่า
 
 NEEDS TESTING:
-  ⚠️ Dashboard — ยังไม่ได้เปิด streamlit จริง
-  ⚠️ Bot countdown / sync_to_candle_close — ยังไม่ได้รันนานพอ
-  ❌ BUY/SELL order execution — ยังไม่เคยถูกเรียกจริง (ตลาด HOLD ตลอด)
-  ❌ Testnet order placement — ไม่รู้ว่า API key มี trading permission
+  ⚠️ BUY/SELL จาก bot จริง — ยังไม่เกิด ตลาด HOLD / Bearish
+       trigger: EMA20 ตัดขึ้นเหนือ EMA50 + ADX > 25
+
+SESSION 8 FIXES (2026-05-28):
+  ✅ Dashboard trade markers — ▲ entry, ✕ SL, ★ TP บน candlestick chart
+     เส้นประเชื่อม entry → exit, สี: ฟ้า=entry, แดง=SL, เขียว=TP, เหลือง=BE
+  ✅ Chart timezone แปลงเป็น Asia/Bangkok (UTC+7) ใน bot/data.py
+     เปลี่ยน: pd.to_datetime(..., utc=True) → .dt.tz_convert('Asia/Bangkok')
+  ✅ แก้ bug marker timezone: trades.csv ใช้ datetime.now() = BKK local time
+     ต้อง tz_localize('Asia/Bangkok') ไม่ใช่ 'UTC'
+  ✅ Kill duplicate Streamlit/bot processes (ป้องกันปัญหา config cache ค้าง)
 
 NOT YET BUILT:
   ❌ Alerts (email / Line Notify)
   ❌ Live trading (USE_TESTNET = False)
 
+PLANNED — Phase ถัดไป (รอให้ระบบปัจจุบันนิ่งก่อน ผ่าน 10 trades):
+  ⏳ Partial Exit Logic
+     ปัจจุบัน : ปิด 100% ที่ TP ใดก็ตามที่โดนก่อน
+     แผน      : แบ่ง position เป็น 3 ส่วน
+
+     TP1 โดนครั้งแรก → ปิด 1/3 + ย้าย SL → BE
+     กรณี A : ราคาขึ้นเหนือ TP1 แล้วย้อนกลับมาแตะ TP1 อีกครั้ง
+              → ปิด 2/3 ที่เหลือทันที (TP1 กลายเป็น resistance)
+     กรณี B : ราคาขึ้นต่อถึง TP2 โดยไม่หันกลับ → ปิด 1/3 ที่ TP2, รอ TP3
+     กรณี C : ราคาแตะ TP1 แป๊บแล้วร่วง → SL ที่ BE ทำงาน (เสมอตัว)
+     เหตุผล : state tracking ซับซ้อน โอกาส bug สูงกว่าปัจจุบัน 3-4 เท่า
+
+BOT LOGIC REFERENCE:
+  Trigger BUY  : EMA20 ตัดขึ้นเหนือ EMA50 (Golden Cross) + ADX > 25
+  Trigger SELL : EMA20 ตัดลงใต้ EMA50 (Death Cross) หรือ SL/TP โดน
+
+  SL  = entry − (ATR × 1.5)   TP1 = entry + (ATR × 1.0)  R:R 1:1
+  TP2 = entry + (ATR × 2.0)   TP3 = entry + (ATR × 3.0)  R:R 1:3
+  Position Size = (balance × 1%) / (entry − SL)  → เสี่ยงสูงสุด 1% ต่อ trade
+  Kill Switch   = daily loss > 5% → หยุดบอท 24 ชั่วโมง
+
 HOW TO RUN:
-  py main.py --test                       # ทดสอบ connection
-  py main.py --dry-run                    # ทดสอบ logic ไม่ส่ง order
-  py main.py --dry-run --verbose          # + แสดง reason ละเอียด
-  py main.py                              # รัน bot จริงบน testnet
-  py backtest/backtest.py --days 30       # backtest 30 วัน
-  py backtest/backtest.py --days 90       # backtest 90 วัน
-  streamlit run dashboard/app.py          # เปิด dashboard
+  python main.py --test                          # ทดสอบ connection
+  python main.py --dry-run                       # ทดสอบ logic ไม่ส่ง order
+  python main.py --dry-run --verbose             # + แสดง reason ละเอียด
+  python main.py                                 # รัน bot จริงบน testnet
+  python backtest/backtest.py --days 30          # backtest 30 วัน
+  python backtest/backtest.py --days 90          # backtest 90 วัน
+  python -m streamlit run dashboard/app.py \
+    --server.headless true \
+    --browser.gatherUsageStats false             # เปิด dashboard → localhost:8501
+  python test_order.py                           # ทดสอบ order API
 
 FILE STRUCTURE:
   BNbotsAPI/

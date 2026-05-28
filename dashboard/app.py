@@ -25,7 +25,7 @@ import config
 from bot.trader    import create_exchange, get_balance
 from bot.data      import get_ohlcv_ccxt
 from bot.indicator import add_all_indicators, find_supply_demand_zones
-from bot.strategy  import get_signal, get_trend_label
+from bot.strategy  import get_signal, get_trend_label, check_htf_trend
 
 # ===================================================
 # Page Setup
@@ -79,29 +79,39 @@ st.markdown("""
 # ===================================================
 
 @st.cache_data(ttl=config.DASHBOARD_REFRESH_SEC)
-def load_ohlcv():
+def load_ohlcv(symbol: str = None):
     """ดึง OHLCV และคำนวณ indicators (cache TTL = refresh interval)"""
+    if symbol is None:
+        symbol = config.SYMBOLS[0]
     try:
         exchange = create_exchange(testnet=config.USE_TESTNET)
-        df = get_ohlcv_ccxt(exchange, config.SYMBOL, config.TIMEFRAME_MAIN, limit=200)
+        df = get_ohlcv_ccxt(exchange, symbol, config.TIMEFRAME_MAIN, limit=200)
+        df_htf = get_ohlcv_ccxt(exchange, symbol, config.TIMEFRAME_HTF, limit=100)
         if df is not None:
             df = add_all_indicators(df)
-        return df, exchange
+        if df_htf is not None:
+            df_htf = add_all_indicators(df_htf)
+        return df, exchange, df_htf
     except Exception as e:
-        return None, None
+        return None, None, None
 
 
-def load_state() -> dict:
-    """โหลด bot state จากไฟล์ JSON"""
+def load_state(symbol: str = None) -> dict:
+    """โหลด bot state จากไฟล์ JSON — per symbol"""
+    if symbol:
+        safe = symbol.replace('/', '')
+        state_file = config.STATE_FILE.replace('state.json', f'state_{safe}.json')
+    else:
+        state_file = config.STATE_FILE
     default = {
         "in_position": False, "bot_active": True,
         "daily_pnl_usdt": 0.0, "daily_pnl_pct": 0.0,
         "cooldown_bars": 0, "resume_time": None,
     }
-    if not os.path.exists(config.STATE_FILE):
+    if not os.path.exists(state_file):
         return default
     try:
-        with open(config.STATE_FILE, 'r', encoding='utf-8') as f:
+        with open(state_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         default.update(data)
         return default
@@ -134,8 +144,8 @@ def get_bot_status_label(state: dict) -> tuple[str, str]:
 # Chart Builder
 # ===================================================
 
-def build_chart(df: pd.DataFrame, state: dict) -> go.Figure:
-    """สร้างกราฟแท่งเทียน + EMA + Zones + SL/TP"""
+def build_chart(df: pd.DataFrame, state: dict, trades_df: pd.DataFrame = None) -> go.Figure:
+    """สร้างกราฟแท่งเทียน + EMA + Zones + SL/TP + Trade markers"""
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
@@ -210,6 +220,81 @@ def build_chart(df: pd.DataFrame, state: dict) -> go.Figure:
                     annotation_position="left",
                 )
 
+    # Trade markers (entry + exit จาก trades.csv)
+    if trades_df is not None and not trades_df.empty:
+        try:
+            tm = trades_df.copy()
+            tm['ts'] = pd.to_datetime(tm['timestamp'])
+            # trades.csv บันทึกด้วย datetime.now() = BKK local time
+            if df.index.tz is not None:
+                if tm['ts'].dt.tz is None:
+                    tm['ts'] = tm['ts'].dt.tz_localize('Asia/Bangkok')
+                else:
+                    tm['ts'] = tm['ts'].dt.tz_convert('Asia/Bangkok')
+            else:
+                tm['ts'] = tm['ts'].dt.tz_localize(None)
+
+            chart_start = df.index[0]
+            chart_end   = df.index[-1]
+            visible = tm[(tm['ts'] >= chart_start) & (tm['ts'] <= chart_end)]
+
+            for _, t in visible.iterrows():
+                result    = str(t.get('result', ''))
+                entry_p   = float(t['entry'])
+                exit_p    = float(t['exit'])
+                ts        = t['ts']
+                direction = str(t.get('direction', 'long'))
+
+                if result == 'WIN':
+                    close_label  = 'TP ✓'
+                    exit_color   = '#0ECB81'
+                    exit_symbol  = 'star'
+                elif result == 'LOSS':
+                    close_label  = 'SL ✗'
+                    exit_color   = '#F6465D'
+                    exit_symbol  = 'x-thin-open'
+                else:
+                    close_label  = 'BE'
+                    exit_color   = '#F0B90B'
+                    exit_symbol  = 'circle-open'
+
+                entry_symbol = 'triangle-up' if direction == 'long' else 'triangle-down'
+                entry_color  = '#36BFFA'
+
+                # Entry marker
+                fig.add_trace(go.Scatter(
+                    x=[ts], y=[entry_p],
+                    mode='markers+text',
+                    marker=dict(symbol=entry_symbol, size=14, color=entry_color,
+                                line=dict(color='#EAECEF', width=1)),
+                    text=[f'▶ {entry_p:,.0f}'],
+                    textposition='top center',
+                    textfont=dict(color=entry_color, size=9),
+                    showlegend=False, hoverinfo='skip',
+                ), row=1, col=1)
+
+                # Exit marker
+                fig.add_trace(go.Scatter(
+                    x=[ts], y=[exit_p],
+                    mode='markers+text',
+                    marker=dict(symbol=exit_symbol, size=14, color=exit_color,
+                                line=dict(color=exit_color, width=2)),
+                    text=[f'{close_label} {exit_p:,.0f}'],
+                    textposition='bottom center',
+                    textfont=dict(color=exit_color, size=9),
+                    showlegend=False, hoverinfo='skip',
+                ), row=1, col=1)
+
+                # เส้นเชื่อม entry → exit
+                fig.add_trace(go.Scatter(
+                    x=[ts, ts], y=[entry_p, exit_p],
+                    mode='lines',
+                    line=dict(color=exit_color, width=1, dash='dot'),
+                    showlegend=False, hoverinfo='skip',
+                ), row=1, col=1)
+        except Exception:
+            pass
+
     # RSI subplot
     fig.add_trace(go.Scatter(
         x=df.index, y=df['rsi'],
@@ -240,21 +325,40 @@ def build_chart(df: pd.DataFrame, state: dict) -> go.Figure:
 # ===================================================
 
 def main():
-    # Header
+    # CSS — ลด padding ทั้ง page
     st.markdown(
-        f"<h1 style='color:#F0B90B;margin-bottom:0'>🤖 Binance Bot Dashboard</h1>"
-        f"<p style='color:#848E9C;margin-top:4px'>"
-        f"{config.SYMBOL} — {config.TIMEFRAME_MAIN} — "
-        f"{'TESTNET' if config.USE_TESTNET else '🔴 LIVE'}"
-        f"</p>",
+        "<style>"
+        ".block-container{padding-top:0.8rem !important;padding-bottom:0 !important}"
+        "header[data-testid='stHeader']{display:none !important}"
+        "[data-testid='stMetric']{padding:0.2rem 0 !important}"
+        "[data-testid='stMetricValue']{font-size:1.5rem !important}"
+        "[data-testid='stMetricLabel']{font-size:0.75rem !important;margin-bottom:0 !important}"
+        "[data-testid='stMetricDelta']{font-size:0.75rem !important}"
+        "hr{margin:0.3rem 0 !important;border-color:#2B3139 !important}"
+        "</style>",
         unsafe_allow_html=True
     )
 
-    st.divider()
+    # Header + Symbol Selector
+    mode = "TESTNET" if config.USE_TESTNET else "🔴 LIVE"
+    hcol, scol = st.columns([3, 1])
+    with hcol:
+        st.markdown(
+            f"<div style='padding:2px 0 6px 0;border-bottom:1px solid #2B3139'>"
+            f"<span style='color:#F0B90B;font-size:1.4rem;font-weight:700'>🤖 Binance Bot Dashboard</span>"
+            f"&nbsp;&nbsp;"
+            f"<span style='color:#848E9C;font-size:0.85rem'>{config.TIMEFRAME_MAIN} — {mode}</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+    with scol:
+        selected_symbol = st.selectbox(
+            "Symbol", config.SYMBOLS, label_visibility="collapsed"
+        )
 
     # โหลดข้อมูล
-    df, exchange = load_ohlcv()
-    state        = load_state()
+    df, exchange, df_htf = load_ohlcv(selected_symbol)
+    state        = load_state(selected_symbol)
     trades_df    = load_trades(20)
 
     if df is None or len(df) < config.EMA_SLOW + 5:
@@ -273,7 +377,7 @@ def main():
 
     # Signal
     dummy_state  = {"in_position": False, "bot_active": True, "cooldown_bars": 0}
-    signal       = get_signal(df, state)
+    signal       = get_signal(df, state, df_htf)
     trend_label  = get_trend_label(df)
 
     # Price change 24h (ถ้า df มีข้อมูลพอ)
@@ -315,8 +419,6 @@ def main():
     with c4:
         st.metric("🤖 สถานะบอท", bot_label, "")
 
-    st.divider()
-
     # ──────────────────────────────────────────────────
     # Row 2: Indicators Bar
     # ──────────────────────────────────────────────────
@@ -331,12 +433,18 @@ def main():
     rsi_label = "OB" if rsi > config.RSI_OB else ("OS" if rsi < config.RSI_OS else "Normal")
     rsi_color = "#F6465D" if rsi > config.RSI_OB else ("#0ECB81" if rsi < config.RSI_OS else "#EAECEF")
 
+    htf_trend = check_htf_trend(df_htf) if df_htf is not None else "N/A"
+    htf_color = {"bullish": "#0ECB81", "bearish": "#F6465D"}.get(htf_trend, "#848E9C")
+    htf_icon  = {"bullish": "↑", "bearish": "↓"}.get(htf_trend, "~")
+
     with i1:
         st.markdown(
             f"**EMA{config.EMA_FAST}/{config.EMA_SLOW}**<br>"
             f"<span style='color:{ema_color}'>{ema_cross}</span><br>"
-            f"<span style='color:#848E9C;font-size:0.8rem'>"
-            f"Fast: ${ema_fast:,.0f}<br>Slow: ${ema_slow:,.0f}</span>",
+            f"<span style='color:{htf_color};font-size:0.8rem'>"
+            f"HTF {config.TIMEFRAME_HTF}: {htf_icon} {htf_trend}</span><br>"
+            f"<span style='color:#848E9C;font-size:0.75rem'>"
+            f"Fast: &#36;{ema_fast:,.0f}  Slow: &#36;{ema_slow:,.0f}</span>",
             unsafe_allow_html=True
         )
     with i2:
@@ -356,8 +464,8 @@ def main():
     with i4:
         st.markdown(
             f"**ATR {config.ATR_PERIOD}**<br>"
-            f"<span style='color:#F0B90B'>${atr:,.0f}</span><br>"
-            f"<span style='color:#848E9C;font-size:0.8rem'>SL: ${atr*config.ATR_SL_MULT:,.0f}  TP: ${atr*config.ATR_TP_MULT:,.0f}</span>",
+            f"<span style='color:#F0B90B'>&#36;{atr:,.0f}</span><br>"
+            f"<span style='color:#848E9C;font-size:0.8rem'>SL: &#36;{atr*config.ATR_SL_MULT:,.0f}  TP: &#36;{atr*config.ATR_TP_MULT:,.0f}</span>",
             unsafe_allow_html=True
         )
     with i5:
@@ -376,7 +484,7 @@ def main():
     # ──────────────────────────────────────────────────
     # Row 3: Candlestick Chart
     # ──────────────────────────────────────────────────
-    fig = build_chart(df.tail(100), state)  # แสดง 100 แท่งล่าสุด
+    fig = build_chart(df.tail(100), state, trades_df)  # แสดง 100 แท่งล่าสุด
     st.plotly_chart(fig, use_container_width=True)
 
     # ──────────────────────────────────────────────────
@@ -425,7 +533,7 @@ def main():
             else:
                 return "background-color: #1E2329; color: #848E9C"
 
-        styled = trades_df.style.applymap(
+        styled = trades_df.style.map(
             color_row, subset=['result'] if 'result' in trades_df.columns else []
         )
         st.dataframe(styled, use_container_width=True, hide_index=True)

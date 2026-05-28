@@ -107,7 +107,7 @@ def get_ohlcv_ccxt(
     exchange = ccxt.binance object จาก create_exchange()
     limit    = จำนวนแท่งเทียนล่าสุด (200 แท่งพอสำหรับ EMA50 + buffer)
 
-    คืน DataFrame ที่มี index เป็น datetime UTC
+    คืน DataFrame ที่มี index เป็น datetime Asia/Bangkok (UTC+7)
     """
     try:
         raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -115,7 +115,7 @@ def get_ohlcv_ccxt(
             return None
 
         df = pd.DataFrame(raw, columns=['time', 'open', 'high', 'low', 'close', 'volume'])
-        df['time'] = pd.to_datetime(df['time'], unit='ms', utc=True)
+        df['time'] = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Bangkok')
         df.set_index('time', inplace=True)
         for col in ['open', 'high', 'low', 'close', 'volume']:
             df[col] = df[col].astype(float)

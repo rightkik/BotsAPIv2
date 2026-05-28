@@ -6,8 +6,9 @@
 
 # Exchange & Pair
 SYMBOL          = "BTC/USDT"
-TIMEFRAME_MAIN  = "1h"       # timeframe หลักสำหรับ signal
-TIMEFRAME_ENTRY = "15m"      # timeframe รองสำหรับยืนยัน entry
+TIMEFRAME_MAIN  = "15m"      # timeframe หลักสำหรับ signal
+TIMEFRAME_ENTRY = "5m"       # timeframe รองสำหรับยืนยัน entry
+TIMEFRAME_HTF   = "1h"       # Higher TF filter — BUY ได้เฉพาะตอน 1h Bullish
 USE_TESTNET     = True
 
 # EMA Settings
@@ -54,6 +55,6 @@ BACKTEST_DAYS        = 90
 BACKTEST_COMMISSION  = 0.001  # 0.1% ต่อ trade (Binance standard)
 BACKTEST_DIR         = "backtest/results"
 
-# Legacy monitor (ยังใช้อยู่ใน bot/monitor.py)
-SYMBOLS          = ["BTC/USDT"]
+# Multi-symbol trading
+SYMBOLS          = ["BTC/USDT", "ETH/USDT"]
 MONITOR_INTERVAL = 60

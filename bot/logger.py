@@ -140,7 +140,8 @@ def print_status(
     state: dict,
     price: float,
     signal: dict,
-    indicators: dict
+    indicators: dict,
+    symbol: str = None,
 ) -> None:
     """
     แสดงสถานะ bot แบบ box UI ใน terminal
@@ -183,7 +184,8 @@ def print_status(
         bot_status = "✅ Active"
 
     print(f"\n┌{line}┐")
-    print(f"│  🤖 BINANCE BOT  │  {config.SYMBOL:<10}│  {config.TIMEFRAME_MAIN:<4}  │")
+    sym = symbol or config.SYMBOL
+    print(f"│  🤖 BINANCE BOT  │  {sym:<10}│  {config.TIMEFRAME_MAIN:<4}  │")
     print(f"│  {now}  │  {bot_status:<14}│")
     print(f"├{line}┤")
     print(f"│  💰 ราคา    : ${price:>12,.2f}                  │")

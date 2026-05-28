@@ -3,6 +3,12 @@
 # API Keys — สำคัญมาก! ห้าม commit เด็ดขาด
 .env
 *.env
+.env.bak
+
+# Runtime data — ไม่ต้อง commit
+data/logs/*.csv
+data/logs/*.json
+data/logs/*.jsonl
 
 # Python
 __pycache__/

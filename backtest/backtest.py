@@ -111,6 +111,7 @@ def fetch_historical_data(
 
 def run_backtest(
     df: pd.DataFrame,
+    df_htf: pd.DataFrame = None,
     initial_capital: float = 10000.0,
     commission_pct: float = None
 ) -> dict:
@@ -119,6 +120,7 @@ def run_backtest(
 
     เงื่อนไข:
     - เปิด position เมื่อ EMA Golden Cross + ADX ผ่าน + RSI < RSI_OB
+    - + HTF filter: BUY ได้เฉพาะตอน TIMEFRAME_HTF เป็น Bullish (EMA_FAST > EMA_SLOW)
     - ปิด position เมื่อ SL/TP โดน หรือ Death Cross
     - commission 0.1% ต่อ order (ซื้อ 1 + ขาย 1 = 0.2% รอบ)
     - ไม่ใช้ leverage
@@ -127,6 +129,13 @@ def run_backtest(
         commission_pct = config.BACKTEST_COMMISSION
 
     df = add_all_indicators(df.copy())
+    if df_htf is not None:
+        df_htf = add_all_indicators(df_htf.copy())
+        # ทำให้ index timezone ตรงกัน
+        if df.index.tz is not None and df_htf.index.tz is None:
+            df_htf.index = df_htf.index.tz_localize(df.index.tz)
+        elif df.index.tz is None and df_htf.index.tz is not None:
+            df_htf.index = df_htf.index.tz_localize(None)
 
     capital   = initial_capital
     equity    = [capital]
@@ -210,7 +219,17 @@ def run_backtest(
             adx_ok = float(prev['adx']) > config.ADX_THRESHOLD if not pd.isna(prev['adx']) else False
             rsi_ok = float(prev['rsi']) < config.RSI_OB if not pd.isna(prev['rsi']) else False
 
-            if golden and adx_ok and rsi_ok:
+            # HTF filter: BUY ได้เฉพาะตอน HTF bullish
+            htf_ok = True
+            if df_htf is not None and golden and adx_ok and rsi_ok:
+                try:
+                    htf_idx = df_htf.index.asof(df.index[i])
+                    htf_row = df_htf.loc[htf_idx]
+                    htf_ok  = float(htf_row['ema_fast']) > float(htf_row['ema_slow'])
+                except Exception:
+                    htf_ok = True  # ถ้าหา HTF bar ไม่ได้ → ผ่านไปก่อน
+
+            if golden and adx_ok and rsi_ok and htf_ok:
                 entry_px = row['open']  # เปิดที่ราคา open ของแท่งถัดไป
                 atr      = float(prev['atr'])
                 levels   = calculate_atr_sl_tp(entry_px, atr, "long")
@@ -410,13 +429,14 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{'=' * 50}")
-    print(f"  BACKTEST ENGINE")
-    print(f"  Symbol: {args.symbol}  TF: {args.timeframe}  Days: {args.days}")
+    print(f"  BACKTEST ENGINE  (+HTF Filter)")
+    print(f"  Symbol: {args.symbol}  TF: {args.timeframe}  HTF: {config.TIMEFRAME_HTF}  Days: {args.days}")
     print(f"  Capital: ${args.capital:,.0f}")
     print(f"{'=' * 50}")
 
     df      = fetch_historical_data(args.symbol, args.timeframe, args.days)
-    results = run_backtest(df, initial_capital=args.capital)
+    df_htf  = fetch_historical_data(args.symbol, config.TIMEFRAME_HTF, args.days)
+    results = run_backtest(df, df_htf=df_htf, initial_capital=args.capital)
     stats   = calculate_stats(results)
 
     print_stats(stats)

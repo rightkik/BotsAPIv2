@@ -83,7 +83,23 @@ def check_near_zone(
     return False
 
 
-def get_signal(df: pd.DataFrame, state: dict) -> dict:
+def check_htf_trend(df_htf: pd.DataFrame) -> str:
+    """
+    เช็ค trend บน Higher Timeframe (1h)
+    คืน 'bullish' | 'bearish' | 'neutral'
+    """
+    df_clean = df_htf[['ema_fast', 'ema_slow']].dropna()
+    if len(df_clean) < 2:
+        return "neutral"
+    last = df_clean.iloc[-2]
+    if float(last['ema_fast']) > float(last['ema_slow']):
+        return "bullish"
+    elif float(last['ema_fast']) < float(last['ema_slow']):
+        return "bearish"
+    return "neutral"
+
+
+def get_signal(df: pd.DataFrame, state: dict, df_htf: pd.DataFrame = None) -> dict:
     """
     คืน signal object พร้อมเหตุผลและความแรง
 
@@ -160,6 +176,10 @@ def get_signal(df: pd.DataFrame, state: dict) -> dict:
         if last_rsi >= config.RSI_OB:
             result["reason"] = f"Golden Cross แต่ RSI overbought ({last_rsi:.1f})"
             return result
+        if df_htf is not None and check_htf_trend(df_htf) != "bullish":
+            htf_trend = check_htf_trend(df_htf)
+            result["reason"] = f"Golden Cross แต่ HTF ({config.TIMEFRAME_HTF}) {htf_trend} — กรองทิ้ง"
+            return result
 
         result["action"] = "BUY"
         result["reason"] = "EMA Golden Cross + ADX ผ่าน"
@@ -185,6 +205,10 @@ def get_signal(df: pd.DataFrame, state: dict) -> dict:
             return result
         if last_rsi <= config.RSI_OS:
             result["reason"] = f"Death Cross แต่ RSI oversold ({last_rsi:.1f})"
+            return result
+        if df_htf is not None and check_htf_trend(df_htf) != "bearish":
+            htf_trend = check_htf_trend(df_htf)
+            result["reason"] = f"Death Cross แต่ HTF ({config.TIMEFRAME_HTF}) {htf_trend} — กรองทิ้ง"
             return result
 
         result["action"] = "SELL"
