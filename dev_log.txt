@@ -1,0 +1,242 @@
+================================================================================
+  BNbotsAPI — Development Log
+  Project: Binance Trading Bot (Python)
+  Developer: Chidchai.k
+================================================================================
+
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 1 — Phase 1: Setup & Connection
+--------------------------------------------------------------------------------
+COMPLETED:
+  - สร้างโครงสร้างโปรเจกต์ทั้งหมด
+  - bot/client.py       : get_client(), test_connection(), get_price(), get_btc_price()
+  - .env.example        : template สำหรับ API key (ห้าม commit .env จริง)
+  - requirements.txt    : python-binance, pandas, numpy, matplotlib, streamlit, python-dotenv
+  - config.py (v1)      : SYMBOL, INTERVAL, MA_SHORT, MA_LONG, STOP_LOSS, TAKE_PROFIT
+
+ISSUES FIXED:
+  - `python` command not found on Windows → ใช้ `py` launcher แทน
+  - pandas==2.1.0 build failure → เปลี่ยนเป็น pandas>=2.2.0
+  - ModuleNotFoundError dotenv → รัน `py -m pip install -r requirements.txt`
+  - UnicodeEncodeError cp1252 (Thai/emoji) → เพิ่ม sys.stdout.reconfigure(encoding='utf-8')
+  - User แชร์ API key ใน chat โดยไม่ตั้งใจ → แจ้งเตือน, สร้าง key ใหม่, ใส่ใน .env
+
+SECURITY NOTE:
+  API Keys ต้องอยู่ใน .env เท่านั้น ห้าม hardcode หรือแชร์ในโค้ด
+
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 2 — Phase 2: Data & Indicators
+--------------------------------------------------------------------------------
+COMPLETED:
+  - bot/data.py         : get_ohlcv(), calculate_ma(), calculate_rsi(), plot_chart()
+  - ดึง OHLCV ย้อนหลัง 30 วัน จาก Binance
+  - คำนวณ MA5/MA20 และ RSI14
+  - บันทึกกราฟ dark theme PNG → data/logs/BTCUSDT_chart.png
+  - วิธีรัน: py main.py
+
+ISSUES FIXED:
+  - matplotlib Thai font warnings → เปลี่ยน label เป็น English ทั้งหมด
+
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 3 — Live Monitor
+--------------------------------------------------------------------------------
+COMPLETED:
+  - bot/monitor.py      : run_monitor() — live terminal loop ทุก 60 วินาที
+  - รองรับหลาย symbol: BTCUSDT + XAUUSDT
+  - countdown timer แสดงใน terminal แบบ real-time
+  - วิธีรัน: py main.py --monitor
+
+ISSUES FIXED:
+  - XAUUSDT "❌ Invalid symbol" ติ๊กขึ้นใน monitor
+    → แก้ get_price() ให้ return None เงียบๆ เมื่อ "Invalid symbol"
+    → เพิ่ม contextlib.redirect_stdout ใน monitor
+  - get_balance() 401 บน Testnet → return 0.0 เงียบๆ สำหรับ 401/403
+
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 4 — Phase 3: Bot Logic & Trading
+--------------------------------------------------------------------------------
+COMPLETED:
+  - bot/strategy.py (v1): get_signal() MA crossover, should_exit(), get_trend_label()
+  - bot/trader.py (v1)  : place_buy(), place_sell(), load/save/clear_position()
+  - bot/logger.py (v1)  : log_trade(), print_summary() → data/logs/trades.csv
+  - main.py             : run_bot() loop + --bot flag
+  - วิธีรัน: py main.py --bot
+
+LOGIC:
+  - BUY  : MA5 ตัด MA20 ขึ้น (Golden Cross)
+  - SELL : MA5 ตัด MA20 ลง  (Death Cross) หรือ SL/TP โดน
+  - Position state เก็บใน data/logs/position.json (persistent)
+
+--------------------------------------------------------------------------------
+[2026-05-28]  Session 5 — Full Upgrade (UPGRADED_PROMPT.md)
+--------------------------------------------------------------------------------
+STRATEGY UPGRADE:
+  เดิม: MA5/MA20 Crossover
+  ใหม่: EMA20/EMA50 + ADX Filter + Supply/Demand Zones + ATR Risk + Kill Switch
+
+FILES REWRITTEN/CREATED:
+  config.py (v2)
+    - SYMBOL = "BTC/USDT" (ccxt format)
+    - EMA_FAST=20, EMA_SLOW=50
+    - ADX_PERIOD=14, ADX_THRESHOLD=25
+    - ATR_SL_MULT=1.5, ATR_TP_MULT=3.0
+    - RISK_PER_TRADE=0.01 (1% per trade)
+    - MAX_DAILY_LOSS_PCT=0.05 (kill switch 5%/day)
+    - COOLDOWN_BARS=3, BREAKEVEN_RR=1.0
+
+  bot/indicator.py (NEW)
+    - calculate_ema()              : Exponential Moving Average
+    - calculate_adx()              : ADX + DI+/DI- (Wilder smoothing)
+    - calculate_rsi()              : RSI14
+    - calculate_atr()              : Average True Range
+    - calculate_volume_delta()     : Buy/Sell pressure จาก candle body
+    - find_supply_demand_zones()   : Pivot high/low → Supply/Demand zones
+    - detect_market_structure()    : BoS / CHoCH detection
+    - add_all_indicators()         : รวมทุก indicator เข้า DataFrame
+
+  bot/risk.py (NEW)
+    - calculate_position_size()    : qty = (balance × risk%) / |entry - SL|
+    - calculate_atr_sl_tp()        : SL=1.5ATR, TP1=1:1, TP2=1:2, TP3=1:3
+    - check_sl_tp()                : ตรวจ SL/TP1/TP2/TP3 hit
+    - should_move_to_breakeven()   : ย้าย SL → entry เมื่อถึง TP1
+    - check_daily_kill_switch()    : หยุดบอท 24hr เมื่อ daily loss > 5%
+    - check_resume_time()          : ตรวจว่า 24hr ผ่านแล้วหรือยัง
+    - should_stop_bot()            : รวมทุกเงื่อนไขหยุด
+
+  bot/strategy.py (REWRITTEN)
+    - detect_ema_crossover()       : Golden/Death Cross (ใช้แท่งปิดแล้ว)
+    - check_adx_filter()           : ADX > threshold
+    - check_near_zone()            : ราคาใกล้ Supply/Demand zone
+    - get_signal()                 : คืน {action, reason, strength, near_demand, near_supply, bos, choch}
+    - get_trend_label()            : Bullish/Bearish/Sideways
+
+  bot/trader.py (REWRITTEN — ccxt)
+    - create_exchange()            : ccxt.binance + sandbox mode
+    - get_balance()                : fetch_balance, handle 401 gracefully
+    - place_market_order()         : retry 3x, exponential backoff สำหรับ RateLimit
+    - execute_signal()             : BUY/SELL/CLOSE flow ครบ + update state
+    - check_and_update_trailing()  : ตรวจ breakeven + SL/TP ทุก loop
+    - load_state() / _save_state() : state.json (overwrite) + persistent
+
+  bot/logger.py (UPGRADED)
+    - log_trade()                  : trades.csv (เพิ่ม SL, TP, ATR, ADX, RSI, result)
+    - log_signal()                 : signals.csv (ทุก signal รวม HOLD)
+    - log_state()                  : state.jsonl (append ทุก loop)
+    - print_status()               : Box UI terminal แบบ real-time
+    - print_summary()              : สรุป WIN/LOSS/BE + total PnL
+
+  bot/data.py (UPDATED)
+    - เพิ่ม get_ohlcv_ccxt()      : ดึง OHLCV ด้วย ccxt exchange object
+
+  main.py (REWRITTEN)
+    - --test      : connection test + indicators snapshot
+    - --dry-run   : รัน logic ครบ ไม่ส่ง order จริง
+    - --verbose   : แสดง reason + trend label ทุก loop
+    - (no flags)  : รัน bot จริงบน testnet
+    - sync_to_candle_close() : รอแท่งปิดจริง แทน sleep(3600)
+    - Multi-TF confirmation  : STRONG signal บน H1 ต้องยืนยันด้วย M15
+
+  backtest/backtest.py (NEW)
+    - ดึงข้อมูลจาก Binance LIVE (public, ไม่ต้อง key)
+    - จำลองการเทรด bar-by-bar ครบ SL/TP/Breakeven/Death Cross
+    - แสดง Win Rate, PnL, Max Drawdown, Sharpe Ratio
+    - บันทึก equity curve PNG → backtest/results/equity_YYYYMMDD.png
+    - บันทึก trades CSV → backtest/results/trades_YYYYMMDD.csv
+    - รัน: py backtest/backtest.py --days 30 --capital 10000
+
+  dashboard/app.py (NEW — Streamlit)
+    - Theme: #0B0E11 background, #F0B90B gold accent, #EAECEF text
+    - Row 1: Price, Signal, Daily PnL, Bot Status
+    - Row 2: EMA cross, ADX, RSI, ATR, Volume Delta indicators
+    - Row 3: Candlestick + EMA lines + Supply/Demand zones + SL/TP lines + RSI subplot
+    - Row 4: Position info (Entry, SL, TP1/2/3, Float PnL, R:R)
+    - Row 5: Trade history table (WIN=เขียว, LOSS=แดง, BE=เทา)
+    - Auto-refresh ทุก 30 วินาที
+    - รัน: streamlit run dashboard/app.py
+
+  requirements.txt (UPDATED)
+    - เพิ่ม: ccxt>=4.3.0, ta>=0.11.0, plotly>=5.18.0
+
+TESTS RUN:
+  ✅ py main.py --test
+     → BTC/USDT = $72,916.53 (-3.71% 24hr)
+     → OHLCV 60 แท่ง  EMA20: $74,528  EMA50: $75,430  ADX: 50.1  RSI: 18.5
+
+  ✅ py main.py --dry-run --verbose (1 loop)
+     → Signal: HOLD (ไม่มี EMA Crossover) — ตลาด Bearish, EMA20 < EMA50
+     → Box UI แสดงถูกต้อง
+
+  ✅ py backtest/backtest.py --days 30
+     → 720 แท่ง (2026-04-28 ถึง 2026-05-28)
+     → 2 trades, Win Rate 0%, PnL -$125.27 (-1.50%), Max DD -1.50%
+     → สอดคล้องกับตลาด Bearish ช่วงนี้
+
+LIBRARY INSTALLATION:
+  py -m pip install ccxt ta plotly -q  ✅
+
+--------------------------------------------------------------------------------
+CURRENT STATUS (2026-05-28)
+--------------------------------------------------------------------------------
+READY:
+  ✅ Connection test
+  ✅ OHLCV data fetching (ccxt)
+  ✅ All indicators (EMA, ADX, RSI, ATR, Zones)
+  ✅ Dry-run bot loop
+  ✅ Backtest engine
+  ✅ Dashboard code
+
+NEEDS TESTING:
+  ⚠️ Dashboard — ยังไม่ได้เปิด streamlit จริง
+  ⚠️ Bot countdown / sync_to_candle_close — ยังไม่ได้รันนานพอ
+  ❌ BUY/SELL order execution — ยังไม่เคยถูกเรียกจริง (ตลาด HOLD ตลอด)
+  ❌ Testnet order placement — ไม่รู้ว่า API key มี trading permission
+
+NOT YET BUILT:
+  ❌ Alerts (email / Line Notify)
+  ❌ Live trading (USE_TESTNET = False)
+
+HOW TO RUN:
+  py main.py --test                       # ทดสอบ connection
+  py main.py --dry-run                    # ทดสอบ logic ไม่ส่ง order
+  py main.py --dry-run --verbose          # + แสดง reason ละเอียด
+  py main.py                              # รัน bot จริงบน testnet
+  py backtest/backtest.py --days 30       # backtest 30 วัน
+  py backtest/backtest.py --days 90       # backtest 90 วัน
+  streamlit run dashboard/app.py          # เปิด dashboard
+
+FILE STRUCTURE:
+  BNbotsAPI/
+  ├── .env                    # API keys (ห้าม commit)
+  ├── .env.example            # template
+  ├── config.py               # settings ทั้งหมด
+  ├── main.py                 # entry point
+  ├── requirements.txt
+  ├── dev_log.txt             # ไฟล์นี้
+  ├── UPGRADED_PROMPT.md      # spec สำหรับ upgrade
+  ├── bot/
+  │   ├── __init__.py
+  │   ├── client.py           # Binance connection (python-binance legacy)
+  │   ├── data.py             # OHLCV fetching (python-binance + ccxt)
+  │   ├── indicator.py        # Technical indicators ทั้งหมด
+  │   ├── monitor.py          # Live terminal monitor (legacy)
+  │   ├── risk.py             # Risk management
+  │   ├── strategy.py         # Signal logic
+  │   ├── trader.py           # Order execution (ccxt)
+  │   └── logger.py           # Logging ทั้งหมด
+  ├── backtest/
+  │   ├── __init__.py
+  │   ├── backtest.py         # Backtest engine
+  │   └── results/            # equity PNG + trades CSV
+  ├── dashboard/
+  │   └── app.py              # Streamlit dashboard
+  └── data/
+      └── logs/
+          ├── trades.csv      # trade history
+          ├── signals.csv     # signal history
+          ├── state.json      # bot state (current)
+          ├── state.jsonl     # bot state (history)
+          └── position.json   # open position (legacy)
+
+================================================================================
+  END OF LOG
+================================================================================

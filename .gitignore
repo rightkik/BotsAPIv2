@@ -1,0 +1,21 @@
+# Binance Bot — ไฟล์ที่ไม่ต้อง commit ขึ้น Git
+
+# API Keys — สำคัญมาก! ห้าม commit เด็ดขาด
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db

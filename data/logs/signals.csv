@@ -1,0 +1,2 @@
+timestamp,symbol,action,strength,reason,price,ema_fast,ema_slow,adx,rsi,atr,near_demand,near_supply,bos,choch
+2026-05-28 13:25:04,BTC/USDT,HOLD,WEAK,ไม่มี EMA Crossover,72942.0,74528.37,75389.79,48.71,18.99,3276.81,False,False,,False
