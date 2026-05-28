@@ -263,7 +263,31 @@ SESSION 8 FIXES (2026-05-28):
      ต้อง tz_localize('Asia/Bangkok') ไม่ใช่ 'UTC'
   ✅ Kill duplicate Streamlit/bot processes (ป้องกันปัญหา config cache ค้าง)
 
+SESSION 9 — Multi-symbol + Strategy Improvements (2026-05-29):
+  ✅ เพิ่ม ETH/USDT — bot รันทั้ง BTC + ETH ต่อรอบ, state แยกต่อ symbol
+     state_BTCUSDT.json / state_ETHUSDT.json
+  ✅ Higher Timeframe Filter (HTF 1h)
+     BUY ได้เฉพาะตอน 1h EMA20 > EMA50 (bullish)
+     SELL ได้เฉพาะตอน 1h EMA20 < EMA50 (bearish)
+  ✅ Backtest รวม HTF filter แล้ว (fetch 1h data + ตรวจ per bar)
+  ✅ Dashboard symbol dropdown — เลือก BTC/ETH ได้
+  ✅ Trade markers บน chart (▲ entry, ✕ SL, ★ TP, เส้นประ entry→exit)
+  ✅ Chart timezone → Asia/Bangkok (UTC+7)
+  ✅ restart_dashboard.bat — double-click kill+start ครั้งเดียว
+  ✅ .gitignore เพิ่ม .env.bak และ data/logs/* (runtime data)
+  ✅ Committed + pushed → github.com/rightkik/BNbotsAPI
+
+BACKTEST COMPARISON (90 วัน Bearish market):
+                    1h       15m      15m+HTF
+  Trades          : 5        15       10
+  Win Rate        : 0%       26.7%    20.0%
+  PnL             : -3.17%   -6.53%   -6.55%
+  Max Drawdown    : -3.17%   -8.14%   -6.55%
+  หมายเหตุ        : HTF filter มีประโยชน์ในตลาด Trending/Bull
+                    ช่วง 90 วันนี้ Bearish ล้วน → ผลต่างไม่ชัด
+
 NOT YET BUILT:
+  ❌ Volume/RSI/Candle body filter (เพิ่ม win rate)
   ❌ Alerts (email / Line Notify)
   ❌ Live trading (USE_TESTNET = False)
 
