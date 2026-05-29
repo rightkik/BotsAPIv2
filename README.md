@@ -1,249 +1,219 @@
-# 🤖 Binance Trading Bot + Dashboard
+# BotsAPIv2 — SET Signal Monitor
 
-> Python trading bot สำหรับ Binance พร้อม monitoring dashboard  
-> สร้างขึ้นเพื่อเรียนรู้ Python และ Algorithmic Trading ไปพร้อมกัน
+> สแกนสัญญาณหุ้นไทย (SET) 27 ตัว แจ้งเตือนผ่าน Telegram อัตโนมัติ
+> พัฒนาต่อจาก BNbotsAPI (Binance bot) — เปลี่ยน direction สู่ตลาดหุ้นไทย
 
 ---
 
-## 📁 โครงสร้าง Project
+## ภาพรวม
+
+| รายการ | รายละเอียด |
+|---|---|
+| ตลาด | SET (หุ้นไทย) — ข้อมูลจาก Yahoo Finance (.BK) |
+| Timeframe | Daily (1d) |
+| Watchlist | 27 หุ้น (PTT, KBANK, BDMS, PTTEP, OR, LH, ...) |
+| Signal | EMA20/EMA50 Crossover + ADX filter + Supply/Demand zones |
+| Alert | Telegram Bot — BUY/SELL/ใกล้ zone |
+| Dashboard | Streamlit — กราฟ + indicators ครบ |
+
+---
+
+## โครงสร้าง Project
 
 ```
-binance-bot/
-├── .env                      # 🔑 API Keys (ห้าม commit!)
-├── .env.example              # ตัวอย่าง .env
-├── .gitignore
-├── requirements.txt          # Python libraries
-├── config.py                 # ตั้งค่ากลยุทธ์และค่าต่างๆ
-├── main.py                   # จุดเริ่มต้น — รัน bot ที่นี่
+BotsAPIv2/
+├── .env                    # API keys (ห้าม commit!)
+├── .env.example            # template
+├── config.py               # ตั้งค่าทั้งหมด
+├── monitor.py              # SET signal monitor loop
+├── run_monitor.bat         # double-click รัน monitor
+├── run_dashboard.bat       # double-click รัน dashboard
 │
-├── bot/                      # 🧠 ตัว Bot หลัก
-│   ├── __init__.py
-│   ├── client.py             # เชื่อมต่อ Binance API
-│   ├── strategy.py           # logic สัญญาณซื้อขาย
-│   ├── trader.py             # ส่งคำสั่งซื้อขาย
-│   └── logger.py             # บันทึก log การเทรด
-│
-├── backtest/                 # 📊 ทดสอบกลยุทธ์กับข้อมูลเก่า
-│   ├── backtest.py
-│   └── results/
-│
-├── dashboard/                # 📺 หน้าจอ Monitoring
-│   └── app.py                # Streamlit app
+├── notifier/               # การแจ้งเตือน
+│   └── telegram.py         # Telegram alert (BUY/SELL/approaching zone)
 │
 ├── data/
-│   └── logs/                 # ไฟล์ CSV บันทึกการเทรด
+│   ├── fetcher.py          # yfinance OHLCV (SET .BK symbols)
+│   ├── cache/
+│   │   └── signals.json    # latest signal ทุก symbol
+│   └── logs/
+│       └── alerts.csv      # Telegram alert history
 │
-└── tests/                    # 🧪 Unit tests
-    └── test_strategy.py
+├── bot/                    # Core logic (ใช้ร่วมกับ Binance bot เดิม)
+│   ├── indicator.py        # EMA, ADX, RSI, ATR, Supply/Demand zones
+│   └── strategy.py         # Signal logic
+│
+├── dashboard/
+│   └── app.py              # Streamlit dashboard
+│
+└── backtest/               # Binance backtest engine (สำรองไว้)
+    └── backtest.py
 ```
 
 ---
 
-## 🚀 วิธีเริ่มต้น (Setup)
+## Setup
 
-### 1. Clone / เปิด Project ใน VS Code
-```bash
-mkdir binance-bot && cd binance-bot
-code .
-```
+### 1. ติดตั้ง Libraries
 
-### 2. สร้าง Virtual Environment
-```python
-# สร้าง environment แยกสำหรับ project นี้
-python -m venv venv
-
-# เปิดใช้งาน (Windows)
-venv\Scripts\activate
-
-# เปิดใช้งาน (Mac/Linux)
-source venv/bin/activate
-```
-
-### 3. ติดตั้ง Libraries
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. ตั้งค่า API Key
+### 2. ตั้งค่า .env
+
 ```bash
-# คัดลอกไฟล์ตัวอย่าง
 cp .env.example .env
-
-# แก้ไข .env ใส่ key ของคุณ
-# ใช้ Testnet key ก่อนเสมอ!
+# แก้ไข .env ใส่ค่าต่อไปนี้
 ```
-
-### 5. ทดสอบการเชื่อมต่อ
-```bash
-python main.py --test
-```
-
----
-
-## ⚙️ การตั้งค่า (.env)
 
 ```env
-# ===== TESTNET (ใช้ก่อน! ปลอดภัย) =====
-BINANCE_TESTNET=true
-BINANCE_API_KEY=your_testnet_api_key_here
-BINANCE_SECRET_KEY=your_testnet_secret_key_here
+# Telegram Bot (สำหรับ alert)
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
 
-# ===== LIVE (เปิดเมื่อพร้อมจริงๆ) =====
-# BINANCE_TESTNET=false
-# BINANCE_API_KEY=your_live_api_key_here
-# BINANCE_SECRET_KEY=your_live_secret_key_here
+# Settrade (Phase 2 — ยังไม่ใช้)
+# SETTRADE_APP_ID=
+# SETTRADE_APP_SECRET=
 ```
 
-> 🔑 สมัคร Testnet ได้ที่: https://testnet.binance.vision
+> สร้าง Telegram bot ได้จาก [@BotFather](https://t.me/BotFather)
 
----
-
-## ⚙️ การตั้งค่ากลยุทธ์ (config.py)
-
-```python
-# config.py — แก้ค่าเหล่านี้เพื่อปรับกลยุทธ์
-
-SYMBOL     = "BTCUSDT"        # คู่เหรียญที่เทรด
-INTERVAL   = "1h"             # timeframe: 1m, 5m, 15m, 1h, 4h, 1d
-QUANTITY   = 0.001            # จำนวน BTC ต่อ order
-
-# MA Crossover Strategy
-MA_SHORT   = 5                # MA เส้นสั้น
-MA_LONG    = 20               # MA เส้นยาว
-
-# Risk Management
-STOP_LOSS  = 0.02             # stop loss 2%
-TAKE_PROFIT = 0.04            # take profit 4%
-MAX_TRADES = 1                # จำนวน position สูงสุดที่เปิดพร้อมกัน
-```
-
----
-
-## 🧠 กลยุทธ์ที่ใช้: MA Crossover
-
-```
-สัญญาณ BUY  🟢 — MA5 ตัด MA20 ขึ้น (Golden Cross)
-สัญญาณ SELL 🔴 — MA5 ตัด MA20 ลง  (Death Cross)
-```
-
-### ภาพรวมการทำงาน
-```
-[ทุก 1 ชั่วโมง]
-      ↓
-ดึงราคาล่าสุด
-      ↓
-คำนวณ MA5 และ MA20
-      ↓
-เกิด Crossover ไหม?
-   ↙         ↘
-ใช่           ไม่
-  ↓
-ส่งคำสั่ง Buy/Sell
-  ↓
-บันทึก Log
-```
-
----
-
-## 📊 รัน Dashboard
+### 3. รัน Monitor
 
 ```bash
-# เปิด Streamlit dashboard
+python monitor.py
+```
+
+หรือ double-click `run_monitor.bat`
+
+### 4. รัน Dashboard
+
+```bash
 streamlit run dashboard/app.py
 ```
 
-เปิด browser ไปที่ `http://localhost:8501`
-
-Dashboard จะแสดง:
-- 📈 กราฟราคา BTC แบบ real-time
-- 🟢🔴 สัญญาณล่าสุด
-- 💰 Portfolio และ PnL
-- 📋 ประวัติการเทรด
+หรือ double-click `run_dashboard.bat` แล้วเปิด `http://localhost:8501`
 
 ---
 
-## 📊 รัน Backtest
+## วิธีทำงาน
 
-```bash
-# ทดสอบกลยุทธ์กับข้อมูล 30 วันที่ผ่านมา
-python backtest/backtest.py --days 30
-
-# ทดสอบ 90 วัน
-python backtest/backtest.py --days 90
 ```
-
-ผลที่จะได้:
-- Win Rate (%)
-- Total PnL
-- Max Drawdown
-- Sharpe Ratio
-
----
-
-## ▶️ รัน Bot
-
-```bash
-# รัน bot (Testnet)
-python main.py
-
-# รัน bot พร้อม log แบบละเอียด
-python main.py --verbose
+[ทุก 5 นาที]
+      ↓
+ดึง OHLCV 27 หุ้น (yfinance daily)
+      ↓
+คำนวณ EMA20/50, ADX, RSI, ATR, Supply/Demand zones
+      ↓
+ตรวจ signal ทุก symbol
+      ↓
+    BUY/SELL?          ใกล้ zone?
+       ↓                   ↓
+  Telegram alert     Telegram warning
+       ↓
+  บันทึก cache → data/cache/signals.json
+       ↓
+  Dashboard อ่าน cache แสดงผล real-time
 ```
 
 ---
 
-## 🛡️ กฎความปลอดภัย
+## กลยุทธ์ที่ใช้
 
-| ❌ ห้ามทำ | ✅ ให้ทำ |
+```
+สัญญาณ BUY  — EMA20 ตัด EMA50 ขึ้น (Golden Cross) + ADX > 25
+สัญญาณ SELL — EMA20 ตัด EMA50 ลง  (Death Cross)  + ADX > 25
+```
+
+กรอง False Signal ด้วย:
+- ADX > 25 (มีเทรนด์พอ)
+- Supply/Demand Zone awareness
+- RSI filter (ไม่ Overbought/Oversold สุดขั้ว)
+
+---
+
+## Watchlist (27 หุ้น SET)
+
+```
+3BBIF  CPAXT  OSP    PTT    KBANK  WHA    TU     PTTEP
+BDMS   HANN   TOP    IVL    TASCO  STGT   TISCO  LH
+OR     RATCH  PACO   EGCO   SCC    ORI    HANA   BAM
+BANPU  RCL    KKP
+```
+
+---
+
+## Telegram Alert ตัวอย่าง
+
+```
+🟢 PTT — ซื้อ (BUY)
+ราคา: 35.50 บาท
+ความแรง: STRONG
+เหตุผล: EMA Golden Cross + ADX=31.2
+เวลา: 29/05 10:15
+
+⚠️ ใกล้แนวรับ (Demand)
+KBANK ราคา 142.00 บาท
+เวลา: 29/05 09:30
+```
+
+---
+
+## config.py — ค่าสำคัญ
+
+```python
+WATCHLIST        = [...]       # 27 หุ้น SET
+TIMEFRAME        = "1d"        # daily
+HISTORY_PERIOD   = "6mo"       # ย้อนหลัง 6 เดือน
+EMA_FAST         = 20
+EMA_SLOW         = 50
+ADX_THRESHOLD    = 25
+MONITOR_INTERVAL = 300         # เช็คทุก 5 นาที (วินาที)
+ALERT_COOLDOWN_SEC = 14400     # ส่ง alert ซ้ำได้ทุก 4 ชั่วโมง
+```
+
+---
+
+## กฎความปลอดภัย
+
+| ห้ามทำ | ให้ทำ |
 |---|---|
-| ใส่ API Key ในโค้ดตรงๆ | ใช้ .env เสมอ |
-| เปิด Withdrawal permission | เปิดแค่ Read + Trade |
-| รัน Live ก่อน Backtest | Testnet → Backtest → Live |
-| ไม่มี Stop Loss | ตั้ง Stop Loss ทุกครั้ง |
+| ใส่ Telegram Token ในโค้ด | ใช้ .env เสมอ |
 | Commit ไฟล์ .env | ใส่ .env ใน .gitignore |
+| ส่ง order โดยอัตโนมัติโดยไม่ตรวจสอบ | monitor แจ้งเตือน, ตัดสินใจเองเสมอ |
 
 ---
 
-## 📦 Libraries ที่ใช้
+## Libraries ที่ใช้
 
-```txt
-# requirements.txt
-python-binance==1.0.19    # เชื่อมต่อ Binance API
-pandas==2.1.0             # จัดการข้อมูลตาราง
-numpy==1.24.0             # คำนวณตัวเลข
-matplotlib==3.7.0         # วาดกราฟ
-streamlit==1.28.0         # Dashboard
-python-dotenv==1.0.0      # โหลด .env
-schedule==1.2.0           # ตั้งเวลารัน bot
-requests==2.31.0          # HTTP requests
+```
+yfinance>=0.2.36      # ดึง OHLCV หุ้นไทย (Yahoo Finance .BK)
+pandas>=2.2.0         # จัดการข้อมูล
+numpy                 # คำนวณตัวเลข
+streamlit>=1.32.0     # dashboard
+plotly>=5.18.0        # กราฟแท่งเทียน
+requests              # Telegram API
+python-dotenv         # โหลด .env
 ```
 
 ---
 
-## 📚 แหล่งเรียนรู้เพิ่มเติม
+## Roadmap
 
-| หัวข้อ | แหล่ง |
-|---|---|
-| Binance API Docs | https://binance-docs.github.io/apidocs |
-| Testnet | https://testnet.binance.vision |
-| Python-Binance Docs | https://python-binance.readthedocs.io |
-| Pandas Tutorial | https://pandas.pydata.org/docs/getting_started |
-| Streamlit Docs | https://docs.streamlit.io |
-
----
-
-## 🗺️ Roadmap
-
-- [x] Setup project structure
-- [ ] เชื่อมต่อ Binance Testnet
-- [ ] ดึงราคาและคำนวณ MA
-- [ ] เขียน signal logic
-- [ ] รัน bot บน Testnet
-- [ ] Backtest 30 วัน
-- [ ] สร้าง Dashboard
-- [ ] เพิ่ม Stop Loss / Take Profit
-- [ ] Go Live ด้วยทุน $10–$50
+- [x] data/fetcher.py — yfinance batch download SET stocks
+- [x] bot/indicator.py — EMA, ADX, RSI, ATR, Supply/Demand zones
+- [x] bot/strategy.py — signal logic พร้อม ADX filter
+- [x] monitor.py — background loop + Telegram alerts
+- [x] dashboard/app.py — Streamlit SET Signal Monitor
+- [x] run_*.bat launchers
+- [ ] Settrade API — realtime price (Phase 2)
+- [ ] Weekly HTF filter (TIMEFRAME_HTF = "1wk")
+- [ ] Volume + RSI confirmation filter
+- [ ] Dashboard grid view — BUY/SELL/HOLD ทุกหุ้นในหน้าเดียว
+- [ ] Line OA / LINE Notify integration
 
 ---
 
-> 💡 **เคล็ดลับ**: อ่าน log ทุกวัน เรียนรู้จากทุก trade ที่บอทตัดสินใจ — ถูกหรือผิดก็มีประโยชน์ทั้งนั้น
+> หมายเหตุ: Binance bot (Sessions 1-9) ยังอยู่ใน main.py / backtest/ สามารถรันได้ตามปกติ
+> ดู dev_log.txt สำหรับประวัติการพัฒนาทั้งหมด

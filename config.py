@@ -1,60 +1,54 @@
-# ===================================================
-# config.py — ค่าตั้งต้นทั้งหมดของ Bot
-#
-# ห้ามใส่ API Key ในไฟล์นี้ — ดึงจาก .env เสมอ
-# ===================================================
+import os
+from dotenv import load_dotenv
 
-# Exchange & Pair
-SYMBOL          = "BTC/USDT"
-TIMEFRAME_MAIN  = "15m"      # timeframe หลักสำหรับ signal
-TIMEFRAME_ENTRY = "5m"       # timeframe รองสำหรับยืนยัน entry
-TIMEFRAME_HTF   = "1h"       # Higher TF filter — BUY ได้เฉพาะตอน 1h Bullish
-USE_TESTNET     = True
+load_dotenv()
 
-# EMA Settings
+# ── Watchlist หุ้นไทย SET ──────────────────────────────
+WATCHLIST = [
+    "3BBIF", "CPAXT", "OSP",   "PTT",   "KBANK", "WHA",  "TU",   "PTTEP",
+    "BDMS",  "HANN",  "TOP",   "IVL",   "TASCO",
+    "STGT",  "TISCO", "LH",    "OR",    "RATCH", "PACO", "EGCO", "SCC",
+    "ORI",   "HANA",  "BAM",   "BANPU", "RCL",   "KKP",
+]
+
+# ── Indicator Settings ─────────────────────────────────
 EMA_FAST        = 20
 EMA_SLOW        = 50
-
-# ADX Settings
 ADX_PERIOD      = 14
-ADX_THRESHOLD   = 25         # ต้องมากกว่านี้ถึงจะเทรด
-
-# RSI Settings
+ADX_THRESHOLD   = 25
 RSI_PERIOD      = 14
-RSI_OB          = 70         # Overbought — กรอง Long
-RSI_OS          = 30         # Oversold — กรอง Short
-
-# ATR Settings
+RSI_OB          = 70
+RSI_OS          = 30
 ATR_PERIOD      = 14
-ATR_SL_MULT     = 1.5        # SL = 1.5 × ATR
-ATR_TP_MULT     = 3.0        # TP = 3.0 × ATR (RR 1:2)
+ATR_SL_MULT     = 1.5
+ATR_TP_MULT     = 3.0
+PIVOT_LENGTH    = 5
+ZONE_BUFFER     = 0.002     # 0.2% รอบ zone (หุ้นไทยมีกระดาน ticksize ชัดเจน)
 
-# Supply/Demand Zone
-PIVOT_LENGTH    = 5          # ความไวในการหา pivot point
-ZONE_BUFFER     = 0.001      # buffer 0.1% รอบ zone
+# ── Data Settings ──────────────────────────────────────
+TIMEFRAME       = "1d"      # daily — เหมาะกับ SET ไทย
+TIMEFRAME_HTF   = "1wk"     # weekly สำหรับ HTF filter (ยังไม่ใช้)
+HISTORY_PERIOD  = "6mo"     # ย้อนหลัง 6 เดือน (~120 วัน พอสำหรับ EMA50)
 
-# Risk Management
-RISK_PER_TRADE       = 0.01  # เสี่ยงได้ 1% ต่อ trade
-BREAKEVEN_RR         = 1.0   # ย้าย SL → entry เมื่อกำไร 1:1
-MAX_DAILY_LOSS_PCT   = 0.05  # kill switch เมื่อขาดทุน 5%/วัน
-MAX_OPEN_TRADES      = 1     # เปิดพร้อมกันสูงสุด 1 position
-COOLDOWN_BARS        = 3     # รอ 3 แท่งหลังปิด trade
+# ── Monitor & Alert ────────────────────────────────────
+MONITOR_INTERVAL    = 300       # เช็คทุก 5 นาที (วินาที)
+ALERT_COOLDOWN_SEC  = 14400     # ส่ง alert ซ้ำได้ทุก 4 ชั่วโมง
 
-# File Paths
-LOG_FILE        = "data/logs/trades.csv"
-SIGNAL_LOG      = "data/logs/signals.csv"
-STATE_FILE      = "data/logs/state.json"
-STATE_HISTORY   = "data/logs/state.jsonl"
-POSITION_FILE   = "data/logs/position.json"
+# ── Dashboard ──────────────────────────────────────────
+DASHBOARD_REFRESH_SEC = 300     # auto-refresh ทุก 5 นาที
+DASHBOARD_COLS        = 4       # card ต่อแถว
 
-# Dashboard
-DASHBOARD_REFRESH_SEC = 30   # refresh ทุก 30 วินาที
+# ── File Paths ─────────────────────────────────────────
+SIGNAL_CACHE    = "data/cache/signals.json"
+ALERT_LOG       = "data/logs/alerts.csv"
 
-# Backtest
-BACKTEST_DAYS        = 90
-BACKTEST_COMMISSION  = 0.001  # 0.1% ต่อ trade (Binance standard)
-BACKTEST_DIR         = "backtest/results"
+# ── Telegram ───────────────────────────────────────────
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Multi-symbol trading
-SYMBOLS          = ["BTC/USDT", "ETH/USDT"]
-MONITOR_INTERVAL = 60
+# ── Settrade (สำหรับ realtime price — Phase 2) ─────────
+SETTRADE_APP_ID     = os.getenv("SETTRADE_APP_ID", "")
+SETTRADE_APP_SECRET = os.getenv("SETTRADE_APP_SECRET", "")
+SETTRADE_USERNAME   = os.getenv("SETTRADE_USERNAME", "")
+SETTRADE_PASSWORD   = os.getenv("SETTRADE_PASSWORD", "")
+SETTRADE_BROKER_ID  = os.getenv("SETTRADE_BROKER_ID", "")

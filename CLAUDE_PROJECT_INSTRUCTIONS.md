@@ -1,124 +1,118 @@
-# 🤖 Binance Trading Bot — Claude Project Instructions
+# BotsAPIv2 — Claude Project Instructions
 
 ## Project Overview
-This project builds an automated Binance trading bot with a dashboard using Python. The goal is to learn Python through building real trading tools — starting from data fetching, to strategy logic, backtesting, and live monitoring.
+BotsAPIv2 เป็น SET Signal Monitor สำหรับหุ้นไทย — สแกนสัญญาณ EMA crossover + ADX filter บน 27 หุ้น SET ทุก 5 นาที และส่งแจ้งเตือนผ่าน Telegram
+
+โปรเจกต์ fork มาจาก BNbotsAPI (Binance crypto bot) ซึ่งยังอยู่ครบใน repo นี้ แต่ทิศทางหลักตอนนี้คือ SET Signal Monitor
 
 ---
 
 ## My Background
-- Previously traded on MetaTrader 4 via XM (Forex/CFD), stopped ~5-6 years ago
-- Beginner in Python — learning through this project
-- Familiar with basic trading concepts (MA, RSI, signals, Buy/Sell)
-- Target market: Crypto via Binance (starting with BTC/USDT)
+- เคยเทรดบน MetaTrader 4 ผ่าน XM (Forex/CFD) หยุดไปประมาณ 5-6 ปีแล้ว
+- Python ระดับกลาง — เรียนรู้ผ่านโปรเจกต์นี้ (เริ่มจาก Sessions 1-9)
+- เข้าใจ concept การเทรด (MA, RSI, signal, Supply/Demand, SL/TP)
+- ตลาดเป้าหมายปัจจุบัน: หุ้นไทย SET (ข้อมูลจาก yfinance .BK)
 
 ---
 
-## Goals
-1. Learn Python fundamentals through practical trading code
-2. Build a working Binance trading bot (starting on Testnet)
-3. Build a monitoring dashboard to visualize bot activity
-4. Understand backtesting before risking real money
-5. Eventually run the bot live with small capital ($10–$50 to start)
+## Current Goals (ณ Session 10)
+1. SET Signal Monitor ที่เสถียรและแจ้งเตือน Telegram ได้ถูกต้อง
+2. Dashboard แสดงสัญญาณ 27 หุ้นแบบ real-time
+3. Phase 2: เชื่อมต่อ Settrade API สำหรับ realtime price
+4. ไม่มีแผน fully-automated order สำหรับตลาด SET — แจ้งเตือน แล้วตัดสินใจเอง
 
 ---
 
 ## Tech Stack
-- **Language**: Python 3.11+
+- **Language**: Python 3.10+
 - **Editor**: VS Code
-- **Key Libraries**: python-binance, pandas, numpy, matplotlib, flask or streamlit (dashboard)
-- **Exchange**: Binance (Testnet first → Live later)
-- **Version Control**: Git
+- **Data**: yfinance (Yahoo Finance, SET .BK symbols)
+- **Dashboard**: Streamlit + Plotly
+- **Alert**: Telegram Bot API
+- **Indicators**: คำนวณเองใน bot/indicator.py (EMA, ADX, RSI, ATR, Supply/Demand)
+- **Version Control**: Git → github.com/rightkik/BNbotsAPI
 
 ---
 
-## Project Phases
+## Coding Guidelines
 
-### Phase 1 — Setup & Connection (Week 1)
-- Install Python, VS Code, libraries
-- Connect to Binance API (read-only first)
-- Fetch and display live prices
-
-### Phase 2 — Data & Indicators (Week 2)
-- Pull OHLCV historical data
-- Calculate indicators: MA, RSI, Bollinger Bands
-- Visualize with matplotlib
-
-### Phase 3 — Bot Logic & Testnet (Week 3)
-- Write signal logic (MA crossover to start)
-- Paper trade on Binance Testnet
-- Log all bot decisions to CSV
-
-### Phase 4 — Backtesting (Week 4)
-- Backtest strategy on 30–90 days of data
-- Calculate PnL, win rate, drawdown
-- Iterate on strategy
-
-### Phase 5 — Dashboard (Month 2)
-- Build monitoring dashboard (Streamlit)
-- Show: live price, bot signals, open positions, PnL
-- Add alerts (email or Line Notify)
-
-### Phase 6 — Live Trading (Month 3+)
-- Move from Testnet to live with small capital
-- Add risk management: stop-loss, position sizing
-- Monitor and tune strategy
-
----
-
-## Coding Guidelines for Claude
-
-### Always explain code in Thai
-เพราะกำลังเรียนรู้ Python ไปพร้อมกัน ให้อธิบายทุก function และ logic เป็นภาษาไทย
+### ภาษา
+- อธิบาย code เป็นภาษาไทย ทั้ง comment และคำอธิบาย
+- ชื่อ function / variable เป็นภาษาอังกฤษ
 
 ### Code style
-- ใส่ comment ภาษาไทยทุก block สำคัญ
-- แยก config ออกจาก logic (ใช้ config.py หรือ .env)
-- ทำ function เล็กๆ ชื่อชัดเจน อย่าเขียนยาวในที่เดียว
-- ทุก function ให้มี docstring สั้นๆ
+- ห้าม hardcode ค่าใดๆ — ดึงจาก config.py เสมอ
+- function เล็ก มีชื่อชัดเจน
+- comment อธิบาย WHY ไม่ใช่ WHAT
 
-### Safety rules (สำคัญมาก)
-- ห้ามใส่ API Key ในโค้ดโดยตรง — ใช้ .env เสมอ
-- ห้ามเปิด Withdrawal permission บน API Key
-- เริ่มบน Testnet เสมอ ก่อน go live
-- มี stop-loss ทุกครั้งก่อนใช้เงินจริง
+### Safety rules
+- ห้ามใส่ Telegram token หรือ API key ในโค้ดโดยตรง — ใช้ .env เสมอ
+- ห้าม commit .env จริง
+- SET Monitor เป็น notification-only — ไม่ส่ง order อัตโนมัติ
 
-### File structure ให้ยึดตามนี้
+---
+
+## File Structure (ปัจจุบัน)
 ```
-binance-bot/
-├── .env                  # API keys (ไม่ commit)
-├── .gitignore
-├── config.py             # ตั้งค่ากลยุทธ์
-├── main.py               # จุดเริ่มต้นรัน bot
-├── bot/
-│   ├── client.py         # เชื่อมต่อ Binance
-│   ├── strategy.py       # logic สัญญาณซื้อขาย
-│   ├── trader.py         # ส่งคำสั่งซื้อขาย
-│   └── logger.py         # บันทึก log
-├── backtest/
-│   ├── backtest.py       # รัน backtest
-│   └── results/          # ผล backtest
-├── dashboard/
-│   └── app.py            # Streamlit dashboard
+BotsAPIv2/
+├── .env                    # keys (ห้าม commit)
+├── .env.example            # template
+├── config.py               # ตั้งค่าทั้งหมด
+├── monitor.py              # SET signal monitor loop (entry point)
+├── main.py                 # Binance bot (ระงับไว้ก่อน)
+├── run_monitor.bat
+├── run_dashboard.bat
+├── notifier/
+│   └── telegram.py         # Telegram alerts
 ├── data/
-│   └── logs/             # trade logs CSV
-└── tests/
-    └── test_strategy.py  # unit tests
+│   ├── fetcher.py          # yfinance OHLCV
+│   ├── cache/signals.json  # latest signals (dashboard อ่าน)
+│   └── logs/alerts.csv
+├── bot/
+│   ├── indicator.py        # indicators (ใช้ร่วม SET + Binance)
+│   ├── strategy.py         # signal logic (ใช้ร่วม SET + Binance)
+│   ├── risk.py             # risk management (Binance)
+│   ├── trader.py           # ccxt order execution (Binance)
+│   └── logger.py           # logging (Binance)
+├── backtest/
+│   └── backtest.py         # Binance backtest engine
+└── dashboard/
+    └── app.py              # Streamlit dashboard (SET Monitor)
 ```
 
 ---
 
-## Strategy Starting Point
-เริ่มด้วย MA Crossover ก่อน (ง่ายที่สุด เข้าใจง่าย)
-- **BUY** เมื่อ MA5 ตัด MA20 ขึ้น (Golden Cross)
-- **SELL** เมื่อ MA5 ตัด MA20 ลง (Death Cross)
-- Pair: BTC/USDT
-- Timeframe: 1 ชั่วโมง
+## Key Config Values
+```python
+WATCHLIST        = [27 SET stocks]
+TIMEFRAME        = "1d"          # daily
+HISTORY_PERIOD   = "6mo"
+EMA_FAST / SLOW  = 20 / 50
+ADX_THRESHOLD    = 25
+MONITOR_INTERVAL = 300           # 5 นาที
+ALERT_COOLDOWN_SEC = 14400       # 4 ชั่วโมง
+SIGNAL_CACHE     = "data/cache/signals.json"
+```
+
+---
+
+## How to Run
+```bash
+python monitor.py                  # รัน SET signal loop
+streamlit run dashboard/app.py     # เปิด dashboard
+python main.py --dry-run           # ทดสอบ Binance bot logic
+python backtest/backtest.py --days 90
+```
 
 ---
 
 ## Questions to Ask Claude
-เมื่อติดปัญหา ให้ถามแบบนี้เพื่อให้ได้คำตอบที่ดีที่สุด:
+เมื่อติดปัญหา ให้ถามแบบนี้:
 - "อธิบาย [function นี้] ให้เข้าใจก่อน แล้วค่อยเขียนโค้ด"
-- "มีวิธีอื่นทำแบบนี้ไหม แบบไหนดีกว่า"
-- "โค้ดนี้มีความเสี่ยงอะไรบ้าง"
-- "เขียน test สำหรับ function นี้ให้ด้วย"
+- "มีวิธีอื่นทำแบบนี้ไหม แบบไหนดีกว่าสำหรับหุ้นไทย"
+- "โค้ดนี้มีความเสี่ยงหรือ edge case อะไรบ้าง"
+
+---
+
+## ประวัติโปรเจกต์
+ดู `dev_log.txt` — บันทึกทุก session ตั้งแต่ Session 1 (Binance bot setup) ถึง Session 10 (SET Monitor pivot)

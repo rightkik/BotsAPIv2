@@ -9,6 +9,7 @@
 data/logs/*.csv
 data/logs/*.json
 data/logs/*.jsonl
+data/cache/
 
 # Python
 __pycache__/

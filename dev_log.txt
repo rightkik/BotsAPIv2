@@ -1,7 +1,8 @@
 ================================================================================
-  BNbotsAPI — Development Log
-  Project: Binance Trading Bot (Python)
+  BotsAPIv2 — Development Log
+  Project: SET Signal Monitor (Thai Stock Market)
   Developer: Chidchai.k
+  Forked from: BNbotsAPI (Binance bot — win rate ต่ำ จึงเปลี่ยน direction)
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -286,22 +287,98 @@ BACKTEST COMPARISON (90 วัน Bearish market):
   หมายเหตุ        : HTF filter มีประโยชน์ในตลาด Trending/Bull
                     ช่วง 90 วันนี้ Bearish ล้วน → ผลต่างไม่ชัด
 
-NOT YET BUILT:
+NOT YET BUILT (Binance Bot — ระงับไว้ก่อน):
   ❌ Volume/RSI/Candle body filter (เพิ่ม win rate)
   ❌ Alerts (email / Line Notify)
   ❌ Live trading (USE_TESTNET = False)
+  ❌ Partial Exit Logic (ปิด 1/3 ที่ TP1, 1/3 ที่ TP2, 1/3 ที่ TP3)
 
-PLANNED — Phase ถัดไป (รอให้ระบบปัจจุบันนิ่งก่อน ผ่าน 10 trades):
-  ⏳ Partial Exit Logic
-     ปัจจุบัน : ปิด 100% ที่ TP ใดก็ตามที่โดนก่อน
-     แผน      : แบ่ง position เป็น 3 ส่วน
+--------------------------------------------------------------------------------
+[2026-05-29]  Session 10 — Project Pivot: SET Signal Monitor (Thai Stock)
+--------------------------------------------------------------------------------
+DIRECTION CHANGE:
+  เดิม : Binance Crypto Trading Bot (BTC/ETH) — win rate ต่ำในตลาด Bearish
+  ใหม่ : SET Signal Monitor — สแกนสัญญาณหุ้นไทย 27 ตัว ส่ง Telegram alert
+  เหตุผล: ตลาดหุ้นไทย (SET) มีนิสัย Trending ชัดกว่า crypto ในช่วงนี้
+          + ต้องการ notification-first approach แทน fully-automated order
 
-     TP1 โดนครั้งแรก → ปิด 1/3 + ย้าย SL → BE
-     กรณี A : ราคาขึ้นเหนือ TP1 แล้วย้อนกลับมาแตะ TP1 อีกครั้ง
-              → ปิด 2/3 ที่เหลือทันที (TP1 กลายเป็น resistance)
-     กรณี B : ราคาขึ้นต่อถึง TP2 โดยไม่หันกลับ → ปิด 1/3 ที่ TP2, รอ TP3
-     กรณี C : ราคาแตะ TP1 แป๊บแล้วร่วง → SL ที่ BE ทำงาน (เสมอตัว)
-     เหตุผล : state tracking ซับซ้อน โอกาส bug สูงกว่าปัจจุบัน 3-4 เท่า
+ARCHITECTURE CHANGE:
+  เดิม : Bot loop → ccxt order บน Binance testnet (1 symbol)
+  ใหม่ : Monitor loop → yfinance data → Telegram alert (27 symbols, ไม่ส่ง order)
+
+NEW FILES:
+  data/fetcher.py (NEW)
+    - fetch_all()  : batch download OHLCV ทุก symbol ใน watchlist ด้วย yfinance
+    - fetch_one()  : ดึง OHLCV symbol เดียว
+    - to_yf()      : แปลง "PTT" → "PTT.BK" (Yahoo Finance format สำหรับ SET)
+    - timezone     : tz_localize / tz_convert → Asia/Bangkok ทุก DataFrame
+
+  monitor.py (NEW — entry point)
+    - run()        : main loop ทุก MONITOR_INTERVAL วินาที (default 5 นาที)
+    - process()    : คำนวณ indicators + signal ทุก symbol ใน watchlist
+    - save_cache() : บันทึก results → data/cache/signals.json
+    - Telegram alert: BUY/SELL → alert_signal(), ใกล้ zone → alert_approaching()
+    - Anti-spam    : cooldown 4 ชั่วโมงต่อ symbol ต่อ alert type
+
+  notifier/telegram.py (NEW)
+    - send()              : POST ไปยัง Telegram Bot API (HTML parse mode)
+    - alert_signal()      : แจ้ง BUY/SELL พร้อมราคา, ความแรง, เหตุผล
+    - alert_approaching() : แจ้งเมื่อราคาใกล้ Supply/Demand zone
+    - _log()              : บันทึก alert history → data/logs/alerts.csv
+
+  notifier/__init__.py (NEW)  : package init
+
+  data/__init__.py (NEW)      : package init
+
+  run_dashboard.bat (NEW)     : double-click เปิด Streamlit dashboard
+  run_monitor.bat   (NEW)     : double-click รัน monitor loop
+
+CONFIG REWRITE (config.py):
+  WATCHLIST = 27 หุ้น SET:
+    3BBIF, CPAXT, OSP, PTT, KBANK, WHA, TU, PTTEP, BDMS, HANN, TOP, IVL,
+    TASCO, STGT, TISCO, LH, OR, RATCH, PACO, EGCO, SCC, ORI, HANA, BAM,
+    BANPU, RCL, KKP
+
+  Data:
+    TIMEFRAME       = "1d"   (daily — เหมาะกับ SET ไทย ตลาดเปิด 09:30-16:30)
+    TIMEFRAME_HTF   = "1wk"  (weekly — สำหรับ HTF filter ในอนาคต)
+    HISTORY_PERIOD  = "6mo"  (6 เดือน ≈ 120 วัน → พอสำหรับ EMA50 + Supply/Demand)
+
+  Alert:
+    MONITOR_INTERVAL    = 300    (5 นาที — yfinance daily ไม่ต้องถี่กว่านี้)
+    ALERT_COOLDOWN_SEC  = 14400  (4 ชั่วโมง — กัน spam ต่อ symbol)
+    SIGNAL_CACHE        = "data/cache/signals.json"
+    ALERT_LOG           = "data/logs/alerts.csv"
+
+  Telegram:
+    TELEGRAM_BOT_TOKEN  (env)
+    TELEGRAM_CHAT_ID    (env)
+
+  Settrade (Phase 2 — ยังไม่ใช้):
+    SETTRADE_APP_ID / APP_SECRET / USERNAME / PASSWORD / BROKER_ID (env)
+
+DASHBOARD REWRITE (dashboard/app.py):
+  Theme    : #0D1117 (GitHub dark), #58A6FF blue accent, #E6EDF3 text
+  Layout   : selectbox เลือก symbol + signal cards ทุกตัวในรายการ
+  Reuses   : bot/indicator.py + bot/strategy.py จาก Binance bot (logic เดิม)
+  Refresh  : DASHBOARD_REFRESH_SEC = 300 (5 นาที)
+
+REUSED FROM BINANCE BOT (ไม่ต้องเขียนใหม่):
+  bot/indicator.py  — EMA, ADX, RSI, ATR, Supply/Demand zones, BoS/CHoCH
+  bot/strategy.py   — get_signal(), get_trend_label()
+
+HOW TO RUN:
+  python monitor.py                              # รัน monitor loop (Ctrl+C หยุด)
+  streamlit run dashboard/app.py                 # เปิด dashboard → localhost:8501
+  run_monitor.bat                                # double-click รัน monitor
+  run_dashboard.bat                              # double-click รัน dashboard
+
+NOT YET BUILT (SET Monitor — Phase 2):
+  ❌ Settrade API integration (realtime price แทน yfinance delayed)
+  ❌ HTF weekly filter (TIMEFRAME_HTF = "1wk" เตรียมไว้แล้วใน config)
+  ❌ Volume filter + RSI confirmation (ลด false signal)
+  ❌ Dashboard: สรุป BUY/SELL/HOLD ทุกหุ้นในหน้าเดียว (grid view)
+  ❌ Line Notify / LINE OA integration
 
 BOT LOGIC REFERENCE:
   Trigger BUY  : EMA20 ตัดขึ้นเหนือ EMA50 (Golden Cross) + ADX > 25
@@ -313,49 +390,56 @@ BOT LOGIC REFERENCE:
   Kill Switch   = daily loss > 5% → หยุดบอท 24 ชั่วโมง
 
 HOW TO RUN:
+  python monitor.py                              # รัน SET signal monitor loop
+  streamlit run dashboard/app.py                 # เปิด dashboard → localhost:8501
+  run_monitor.bat                                # double-click รัน monitor
+  run_dashboard.bat                              # double-click รัน dashboard
+
+  — Binance bot (ระงับไว้ก่อน) —
   python main.py --test                          # ทดสอบ connection
-  python main.py --dry-run                       # ทดสอบ logic ไม่ส่ง order
-  python main.py --dry-run --verbose             # + แสดง reason ละเอียด
-  python main.py                                 # รัน bot จริงบน testnet
-  python backtest/backtest.py --days 30          # backtest 30 วัน
+  python main.py --dry-run --verbose             # ทดสอบ logic ไม่ส่ง order
   python backtest/backtest.py --days 90          # backtest 90 วัน
-  python -m streamlit run dashboard/app.py \
-    --server.headless true \
-    --browser.gatherUsageStats false             # เปิด dashboard → localhost:8501
-  python test_order.py                           # ทดสอบ order API
 
 FILE STRUCTURE:
-  BNbotsAPI/
-  ├── .env                    # API keys (ห้าม commit)
+  BotsAPIv2/
+  ├── .env                    # API keys ทั้งหมด (ห้าม commit)
   ├── .env.example            # template
-  ├── config.py               # settings ทั้งหมด
-  ├── main.py                 # entry point
+  ├── config.py               # settings ทั้งหมด (SET Monitor + Binance)
+  ├── monitor.py              # SET signal monitor loop (entry point)
+  ├── main.py                 # Binance bot entry point (ระงับไว้)
   ├── requirements.txt
   ├── dev_log.txt             # ไฟล์นี้
-  ├── UPGRADED_PROMPT.md      # spec สำหรับ upgrade
+  ├── run_monitor.bat         # double-click launcher
+  ├── run_dashboard.bat       # double-click launcher
+  ├── notifier/
+  │   ├── __init__.py
+  │   └── telegram.py         # Telegram alert (BUY/SELL/approaching zone)
+  ├── data/
+  │   ├── __init__.py
+  │   ├── fetcher.py          # yfinance OHLCV (SET .BK symbols)
+  │   ├── cache/
+  │   │   └── signals.json    # latest signal ทุก symbol (dashboard อ่าน)
+  │   └── logs/
+  │       ├── alerts.csv      # Telegram alert history
+  │       ├── signals.csv     # signal history (Binance bot)
+  │       ├── state.jsonl     # bot state history (Binance bot)
+  │       └── trades.csv      # trade history (Binance bot)
   ├── bot/
   │   ├── __init__.py
-  │   ├── client.py           # Binance connection (python-binance legacy)
-  │   ├── data.py             # OHLCV fetching (python-binance + ccxt)
-  │   ├── indicator.py        # Technical indicators ทั้งหมด
-  │   ├── monitor.py          # Live terminal monitor (legacy)
-  │   ├── risk.py             # Risk management
-  │   ├── strategy.py         # Signal logic
-  │   ├── trader.py           # Order execution (ccxt)
-  │   └── logger.py           # Logging ทั้งหมด
+  │   ├── indicator.py        # Technical indicators (ใช้ร่วม SET + Binance)
+  │   ├── strategy.py         # Signal logic (ใช้ร่วม SET + Binance)
+  │   ├── risk.py             # Risk management (Binance bot)
+  │   ├── trader.py           # Order execution ccxt (Binance bot)
+  │   ├── logger.py           # Logging (Binance bot)
+  │   ├── data.py             # OHLCV ccxt (Binance bot)
+  │   ├── client.py           # python-binance legacy
+  │   └── monitor.py          # terminal monitor legacy
   ├── backtest/
   │   ├── __init__.py
-  │   ├── backtest.py         # Backtest engine
+  │   ├── backtest.py         # Backtest engine (Binance bot)
   │   └── results/            # equity PNG + trades CSV
-  ├── dashboard/
-  │   └── app.py              # Streamlit dashboard
-  └── data/
-      └── logs/
-          ├── trades.csv      # trade history
-          ├── signals.csv     # signal history
-          ├── state.json      # bot state (current)
-          ├── state.jsonl     # bot state (history)
-          └── position.json   # open position (legacy)
+  └── dashboard/
+      └── app.py              # Streamlit dashboard (SET Signal Monitor)
 
 ================================================================================
   END OF LOG

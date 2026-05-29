@@ -2,6 +2,10 @@
 # รวม + ปรับปรุงจาก TradingView concept + Python bot spec
 # เอาไฟล์นี้วางใน root project แล้วใช้ prompt ด้านล่างสั่ง Claude Code
 
+> **[COMPLETED — Session 5–9]** Spec นี้ถูก implement ครบแล้วใน bot/ ทุกไฟล์
+> bot/indicator.py, bot/strategy.py, bot/risk.py, bot/trader.py, bot/logger.py, backtest/backtest.py
+> ปัจจุบันโปรเจกต์ pivot สู่ SET Signal Monitor — ดู README.md และ PHASE_GUIDES.md
+
 ---
 
 ## สิ่งที่ Upgrade จากแผนเดิม
