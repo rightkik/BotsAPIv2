@@ -9,6 +9,8 @@ warnings.filterwarnings("ignore")
 
 
 def to_yf(symbol: str) -> str:
+    if symbol == "SET":
+        return "^SET.BK"
     return f"{symbol}.BK"
 
 

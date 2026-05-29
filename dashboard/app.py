@@ -4,10 +4,10 @@ dashboard/app.py — SET Signal Monitor Dashboard
 รัน: streamlit run dashboard/app.py
 """
 
-import json
 import os
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -18,8 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 from bot.indicator import add_all_indicators, find_supply_demand_zones
-from bot.strategy  import get_signal, get_trend_label
-from data.fetcher  import fetch_all, fetch_one
+from bot.strategy  import get_signal
+from data.fetcher  import fetch_all
+from data.settrade_fetcher import fetch_all_st, has_credentials
 
 # ══════════════════════════════════════════════════════
 # Page Config
@@ -43,6 +44,24 @@ st.markdown("""
   .stSelectbox label { color: #8B949E !important; }
   [data-testid="stMetricValue"] { font-size:1.3rem !important; }
   [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
+  /* card select buttons — top of each stock card */
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
+    background: #1C2128 !important;
+    border: 1px solid #30363D !important;
+    border-bottom: none !important;
+    color: #58A6FF !important;
+    font-weight: 700 !important;
+    font-size: 0.88rem !important;
+    padding: 5px 0 !important;
+    border-radius: 6px 6px 0 0 !important;
+    letter-spacing: 0.03em;
+  }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
+    background: #21262D !important;
+    border-color: #58A6FF !important;
+    border-bottom: none !important;
+    color: #79C0FF !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,47 +70,40 @@ st.markdown("""
 # ══════════════════════════════════════════════════════
 
 DUMMY_STATE = {"in_position": False, "bot_active": True, "cooldown_bars": 0}
+BKK = ZoneInfo("Asia/Bangkok")
 
-SIG_COLOR = {
-    "BUY":  "#238636",  # เขียวเข้ม
-    "SELL": "#DA3633",  # แดงเข้ม
-    "HOLD": "#21262D",  # เทาเข้ม
-}
-SIG_TEXT = {
-    "BUY":  "#3FB950",
-    "SELL": "#F85149",
-    "HOLD": "#8B949E",
-}
-SIG_BORDER = {
-    "BUY":  "#3FB950",
-    "SELL": "#F85149",
-    "HOLD": "#30363D",
-}
+SIG_COLOR  = {"BUY": "#238636", "SELL": "#DA3633", "HOLD": "#21262D"}
+SIG_TEXT   = {"BUY": "#3FB950", "SELL": "#F85149", "HOLD": "#8B949E"}
+SIG_BORDER = {"BUY": "#3FB950", "SELL": "#F85149", "HOLD": "#30363D"}
+
+# ══════════════════════════════════════════════════════
+# Session State
+# ══════════════════════════════════════════════════════
+
+if "selected" not in st.session_state:
+    st.session_state.selected = "SET"
+if "data_mode" not in st.session_state:
+    st.session_state.data_mode = "daily"
 
 # ══════════════════════════════════════════════════════
 # Data Loading
 # ══════════════════════════════════════════════════════
 
-@st.cache_data(ttl=config.DASHBOARD_REFRESH_SEC)
-def load_all_signals():
-    """ดึงข้อมูล + คำนวณ signal ทุกตัว (cache TTL = refresh interval)"""
-    ohlcv_map = fetch_all()
-    results   = {}
-
-    for symbol in config.WATCHLIST:
+def _build_results(ohlcv_map: dict, watchlist: list) -> dict:
+    """คำนวณ indicators + signal จาก ohlcv_map ที่รับมา"""
+    results = {}
+    for symbol in watchlist:
         df = ohlcv_map.get(symbol)
         if df is None or len(df) < config.EMA_SLOW + 10:
             results[symbol] = {"symbol": symbol, "error": "ข้อมูลไม่พอ"}
             continue
         try:
-            df  = add_all_indicators(df)
-            sig = get_signal(df, DUMMY_STATE)
-
-            last  = df.iloc[-2]
-            prev  = df.iloc[-3]
+            df2  = add_all_indicators(df)
+            sig  = get_signal(df2, DUMMY_STATE)
+            last = df2.iloc[-2]
+            prev = df2.iloc[-3]
             price = float(df["close"].iloc[-1])
             chg   = (float(last["close"]) - float(prev["close"])) / float(prev["close"]) * 100
-
             results[symbol] = {
                 "symbol":        symbol,
                 "price":         price,
@@ -106,20 +118,31 @@ def load_all_signals():
                 "reason":        sig["reason"],
                 "near_demand":   sig["near_demand"],
                 "near_supply":   sig["near_supply"],
-                "_df":           df,
+                "_df":           df2,
             }
         except Exception as e:
             results[symbol] = {"symbol": symbol, "error": str(e)}
-
     return results
 
 
+@st.cache_data(ttl=config.DASHBOARD_REFRESH_SEC)
+def load_signals_daily():
+    """Daily mode — ดึงข้อมูลจาก yfinance (cache 5 นาที)"""
+    return _build_results(fetch_all(), list(config.WATCHLIST))
+
+
+@st.cache_data(ttl=config.REALTIME_REFRESH_SEC)
+def load_signals_realtime():
+    """Real-time mode — ดึงข้อมูลจาก Settrade (cache 1 นาที, ข้าม SET index)"""
+    watchlist = [s for s in config.WATCHLIST if s != "SET"]
+    return _build_results(fetch_all_st(), watchlist)
+
+
 def is_market_open() -> bool:
-    now = datetime.now()
+    now = datetime.now(tz=BKK)
     if now.weekday() >= 5:
         return False
-    h, m = now.hour, now.minute
-    t = h * 60 + m
+    t = now.hour * 60 + now.minute
     return (9*60 <= t <= 12*60+30) or (14*60 <= t <= 16*60+30)
 
 
@@ -128,13 +151,12 @@ def is_market_open() -> bool:
 # ══════════════════════════════════════════════════════
 
 def render_card(data: dict):
-    """แสดง card หุ้น 1 ตัว"""
+    """แสดงข้อมูลหุ้น 1 ตัว (ไม่มีชื่อ — อยู่ในปุ่มด้านบนแล้ว)"""
     if "error" in data:
         st.markdown(f"""
-        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px;
-                    padding:10px 12px;margin:3px 0;min-height:110px">
-          <b style="color:#E6EDF3">{data['symbol']}</b>
-          <br><span style="color:#F85149;font-size:0.75rem">{data['error']}</span>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:0 0 8px 8px;
+                    padding:10px 12px;margin:0;min-height:82px">
+          <span style="color:#F85149;font-size:0.75rem">{data['error']}</span>
         </div>""", unsafe_allow_html=True)
         return
 
@@ -145,12 +167,10 @@ def render_card(data: dict):
     near_d = data["near_demand"]
     near_s = data["near_supply"]
 
-    # badge ความแรง
     strength_badge = ""
     if sig != "HOLD" and data["strength"] == "STRONG":
         strength_badge = "<span style='font-size:0.65rem;color:#E3B341'>★ STRONG</span> "
 
-    # near zone indicator
     near_tag = ""
     if near_d and sig == "HOLD":
         near_tag = "<span style='font-size:0.65rem;color:#3FB950'>▲ ใกล้แนวรับ</span>"
@@ -159,33 +179,26 @@ def render_card(data: dict):
 
     chg_color = "#3FB950" if chg >= 0 else "#F85149"
     chg_sign  = "+" if chg >= 0 else ""
-
     rsi_color = "#F85149" if rsi > 70 else ("#3FB950" if rsi < 30 else "#8B949E")
     adx_color = "#3FB950" if adx > config.ADX_THRESHOLD else "#E3B341"
-
-    # border สีตาม signal
-    border_color = SIG_BORDER[sig]
-    bg_color     = "#1A2332" if sig == "BUY" else ("#2A1A1A" if sig == "SELL" else "#161B22")
+    bg_color  = "#1A2332" if sig == "BUY" else ("#2A1A1A" if sig == "SELL" else "#161B22")
 
     st.markdown(f"""
-    <div style="background:{bg_color};border:1px solid {border_color};border-radius:8px;
-                padding:10px 12px;margin:3px 0;min-height:115px">
+    <div style="background:{bg_color};border:1px solid {SIG_BORDER[sig]};
+                border-radius:0 0 8px 8px;padding:10px 12px;margin:0;min-height:82px">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <b style="color:#E6EDF3;font-size:1rem">{data['symbol']}</b>
         <span style="background:{SIG_COLOR[sig]};color:{SIG_TEXT[sig]};
-                     padding:2px 8px;border-radius:4px;font-size:0.8rem;font-weight:700">{sig}</span>
+                     padding:2px 7px;border-radius:4px;font-size:0.78rem;font-weight:700">{sig}</span>
+        <span style="font-size:1.05rem;color:#E6EDF3;font-weight:600">
+          {data['price']:,.2f}
+          <span style="font-size:0.76rem;color:{chg_color}">&nbsp;{chg_sign}{chg:.2f}%</span>
+        </span>
       </div>
-      <div style="font-size:1.15rem;color:#E6EDF3;margin:3px 0;font-weight:600">
-        {data['price']:,.2f}
-        <span style="font-size:0.8rem;color:{chg_color};margin-left:6px">{chg_sign}{chg:.2f}%</span>
-      </div>
-      <div style="font-size:0.72rem;display:flex;gap:10px">
+      <div style="font-size:0.71rem;display:flex;gap:10px;margin-top:5px">
         <span>RSI: <span style="color:{rsi_color};font-weight:600">{rsi:.0f}</span></span>
         <span>ADX: <span style="color:{adx_color};font-weight:600">{adx:.0f}</span></span>
       </div>
-      <div style="font-size:0.68rem;margin-top:3px;color:#8B949E">
-        {strength_badge}{near_tag}
-      </div>
+      <div style="font-size:0.67rem;margin-top:3px;color:#8B949E">{strength_badge}{near_tag}&nbsp;</div>
     </div>""", unsafe_allow_html=True)
 
 
@@ -203,7 +216,6 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
         vertical_spacing=0.03,
     )
 
-    # Candlestick
     fig.add_trace(go.Candlestick(
         x=df_chart.index,
         open=df_chart["open"], high=df_chart["high"],
@@ -213,19 +225,15 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
         decreasing_line_color="#F85149", decreasing_fillcolor="#F85149",
     ), row=1, col=1)
 
-    # EMA lines
     fig.add_trace(go.Scatter(
         x=df_chart.index, y=df_chart["ema_fast"],
-        name=f"EMA{config.EMA_FAST}",
-        line=dict(color="#58A6FF", width=1.5),
+        name=f"EMA{config.EMA_FAST}", line=dict(color="#58A6FF", width=1.5),
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=df_chart.index, y=df_chart["ema_slow"],
-        name=f"EMA{config.EMA_SLOW}",
-        line=dict(color="#E3B341", width=1.5),
+        name=f"EMA{config.EMA_SLOW}", line=dict(color="#E3B341", width=1.5),
     ), row=1, col=1)
 
-    # Supply / Demand Zones
     zones = find_supply_demand_zones(df_chart, config.PIVOT_LENGTH)
     for z_high, z_low in zones["supply"][-3:]:
         fig.add_hrect(y0=z_low, y1=z_high, row=1, col=1,
@@ -240,7 +248,6 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
                       annotation_text="Demand", annotation_font_color="#3FB950",
                       annotation_position="right")
 
-    # ADX
     fig.add_trace(go.Scatter(
         x=df_chart.index, y=df_chart["adx"],
         name="ADX", line=dict(color="#8B949E", width=1.2),
@@ -248,7 +255,6 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
     fig.add_hline(y=config.ADX_THRESHOLD, row=2, col=1,
                   line=dict(color="#E3B341", dash="dash", width=0.8))
 
-    # RSI
     fig.add_trace(go.Scatter(
         x=df_chart.index, y=df_chart["rsi"],
         name="RSI", line=dict(color="#BC8CFF", width=1.2),
@@ -268,8 +274,16 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
     )
     fig.update_yaxes(gridcolor="#1C2128", zerolinecolor="#1C2128")
     fig.update_xaxes(gridcolor="#1C2128", rangeslider_visible=False)
-
     return fig
+
+
+# ══════════════════════════════════════════════════════
+# Card click callback
+# ══════════════════════════════════════════════════════
+
+def _select(sym: str):
+    """callback เมื่อคลิกปุ่มชื่อหุ้น — อัปเดต session state ก่อน rerender"""
+    st.session_state.selected = sym
 
 
 # ══════════════════════════════════════════════════════
@@ -277,16 +291,18 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
 # ══════════════════════════════════════════════════════
 
 def main():
-    # ── Header ────────────────────────────────────────
     market_open  = is_market_open()
     market_label = "🟢 ตลาดเปิด" if market_open else "🔴 ตลาดปิด"
-    now_str      = datetime.now().strftime("%d/%m/%Y %H:%M")
+    now_str      = datetime.now(tz=BKK).strftime("%d/%m/%Y %H:%M")
 
-    h1, h2, h3 = st.columns([3, 1, 1])
+    # ── Header ─────────────────────────────────────────
+    h1, h2, h3, h4, h5 = st.columns([2.8, 1, 1, 1, 1.5])
     with h1:
+        tf_label = f"{config.REALTIME_INTERVAL}m" \
+                   if st.session_state.data_mode == "realtime" else "Daily"
         st.markdown(
             "<span style='color:#58A6FF;font-size:1.5rem;font-weight:700'>📈 SET Signal Monitor</span>"
-            f"&nbsp;&nbsp;<span style='color:#8B949E;font-size:0.85rem'>Daily TF — {now_str}</span>",
+            f"&nbsp;&nbsp;<span style='color:#8B949E;font-size:0.85rem'>{tf_label} TF — {now_str}</span>",
             unsafe_allow_html=True,
         )
     with h2:
@@ -295,18 +311,53 @@ def main():
             unsafe_allow_html=True,
         )
     with h3:
+        # mode toggle
+        mode_choice = st.selectbox(
+            "mode",
+            options=["📊 Daily", "⚡ Real-time"],
+            index=0 if st.session_state.data_mode == "daily" else 1,
+            label_visibility="collapsed",
+        )
+        new_mode = "realtime" if "Real-time" in mode_choice else "daily"
+        if new_mode != st.session_state.data_mode:
+            st.session_state.data_mode = new_mode
+            st.cache_data.clear()
+            st.rerun()
+    with h4:
         filter_opt = st.selectbox(
             "filter", ["ทั้งหมด", "BUY", "SELL", "ใกล้ Zone"],
             label_visibility="collapsed",
         )
+    with h5:
+        # selectbox sync กับ session_state.selected
+        all_syms = list(config.WATCHLIST)
+        cur_idx  = all_syms.index(st.session_state.selected) \
+                   if st.session_state.selected in all_syms else 0
+        chosen = st.selectbox(
+            "เลือกหุ้น", options=all_syms, index=cur_idx,
+            label_visibility="collapsed",
+        )
+        if chosen != st.session_state.selected:
+            st.session_state.selected = chosen
 
     st.divider()
 
-    # ── โหลดข้อมูล ─────────────────────────────────────
-    with st.spinner("กำลังดึงข้อมูล..."):
-        all_data = load_all_signals()
+    # ── Load data ───────────────────────────────────────
+    is_realtime = st.session_state.data_mode == "realtime"
 
-    # ── Summary Bar ────────────────────────────────────
+    if is_realtime and not has_credentials():
+        st.warning(
+            "⚡ **Real-time mode** ต้องการ Settrade credentials — "
+            "ตั้งค่าใน `.env` ก่อน ([ดูวิธีสมัคร](https://developer.settrade.com)) "
+            "| แสดงข้อมูล Daily (yfinance) แทนชั่วคราว",
+            icon="🔑",
+        )
+        is_realtime = False  # fallback to daily
+
+    with st.spinner("กำลังดึงข้อมูล..."):
+        all_data = load_signals_realtime() if is_realtime else load_signals_daily()
+
+    # ── Summary bar ─────────────────────────────────────
     buy_list  = [s for s, d in all_data.items() if d.get("signal") == "BUY"]
     sell_list = [s for s, d in all_data.items() if d.get("signal") == "SELL"]
     near_list = [s for s, d in all_data.items()
@@ -314,14 +365,63 @@ def main():
     hold_cnt  = sum(1 for d in all_data.values() if d.get("signal") == "HOLD")
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("🟢 BUY",  len(buy_list),  f"{', '.join(buy_list[:3])}{'...' if len(buy_list) > 3 else ''}" or "-")
-    m2.metric("🔴 SELL", len(sell_list), f"{', '.join(sell_list[:3])}{'...' if len(sell_list) > 3 else ''}" or "-")
+    m1.metric("🟢 BUY",  len(buy_list),
+              ", ".join(buy_list[:3]) + ("…" if len(buy_list) > 3 else "") or "-")
+    m2.metric("🔴 SELL", len(sell_list),
+              ", ".join(sell_list[:3]) + ("…" if len(sell_list) > 3 else "") or "-")
     m3.metric("⚪ HOLD", hold_cnt)
     m4.metric("⚠️ ใกล้ Zone", len(near_list), ", ".join(near_list[:3]) or "-")
 
     st.divider()
 
-    # ── Filter ─────────────────────────────────────────
+    # ══════════════════════════════════════════════════
+    # รายละเอียด + กราฟ  (อยู่เหนือ grid)
+    # ══════════════════════════════════════════════════
+    selected = st.session_state.selected
+    st.markdown(f"### รายละเอียด — {selected}")
+
+    data = all_data.get(selected, {})
+    if "error" not in data and "_df" in data:
+        df  = data["_df"]
+        sig = data["signal"]
+
+        ic1, ic2, ic3, ic4, ic5 = st.columns(5)
+        ema_bull = data["ema_fast"] > data["ema_slow"]
+        ic1.metric(
+            f"EMA{config.EMA_FAST}/{config.EMA_SLOW}",
+            "Bullish ↑" if ema_bull else "Bearish ↓",
+            f"{data['ema_fast']:.2f} / {data['ema_slow']:.2f}",
+        )
+        ic2.metric("ADX", f"{data['adx']:.1f}",
+                   "Trending" if data["adx"] > config.ADX_THRESHOLD else "Sideways")
+        ic3.metric("RSI", f"{data['rsi']:.1f}",
+                   "Overbought" if data["rsi"] > config.RSI_OB else
+                   ("Oversold" if data["rsi"] < config.RSI_OS else "Normal"))
+        ic4.metric("ATR", f"{data['atr']:.2f}")
+        ic5.metric("Signal", sig,
+                   data["strength"] if sig != "HOLD" else data["reason"][:30])
+
+        fig = build_chart(df, selected)
+        st.plotly_chart(fig, use_container_width=True)
+
+        if sig != "HOLD":
+            color = "#238636" if sig == "BUY" else "#DA3633"
+            st.markdown(
+                f"<div style='background:{color};padding:8px 14px;border-radius:6px;"
+                f"color:#fff;font-size:0.9rem'>"
+                f"<b>{sig}</b> — {data['reason']}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        err_msg = data.get("error", "ไม่มีข้อมูล") if data else "กำลังโหลด..."
+        st.warning(f"{selected}: {err_msg}")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════
+    # Stock Grid
+    # ══════════════════════════════════════════════════
+
     if filter_opt == "BUY":
         display = [s for s in config.WATCHLIST if all_data.get(s, {}).get("signal") == "BUY"]
     elif filter_opt == "SELL":
@@ -332,71 +432,43 @@ def main():
     else:
         display = list(config.WATCHLIST)
 
-    # ── Stock Grid ─────────────────────────────────────
-    cols = st.columns(config.DASHBOARD_COLS)
-    for i, symbol in enumerate(display):
-        data = all_data.get(symbol, {"symbol": symbol, "error": "ไม่มีข้อมูล"})
-        with cols[i % config.DASHBOARD_COLS]:
-            render_card(data)
-
-    st.divider()
-
-    # ── Detail Chart ───────────────────────────────────
-    st.markdown("### รายละเอียด")
-    selected = st.selectbox(
-        "เลือกหุ้น",
-        options=list(config.WATCHLIST),
-        index=0,
-    )
-
-    data = all_data.get(selected, {})
-    if "error" not in data and "_df" in data:
-        df  = data["_df"]
-        sig = data["signal"]
-
-        # Indicator row
-        ic1, ic2, ic3, ic4, ic5 = st.columns(5)
-        ema_bull = data["ema_fast"] > data["ema_slow"]
-        ic1.metric(f"EMA{config.EMA_FAST}/{config.EMA_SLOW}",
-                   "Bullish ↑" if ema_bull else "Bearish ↓",
-                   f"{data['ema_fast']:.2f} / {data['ema_slow']:.2f}")
-        ic2.metric("ADX", f"{data['adx']:.1f}",
-                   "Trending" if data["adx"] > config.ADX_THRESHOLD else "Sideways")
-        ic3.metric("RSI", f"{data['rsi']:.1f}",
-                   "Overbought" if data["rsi"] > config.RSI_OB else
-                   ("Oversold" if data["rsi"] < config.RSI_OS else "Normal"))
-        ic4.metric("ATR", f"{data['atr']:.2f}")
-        ic5.metric("Signal", f"{sig}",
-                   data["strength"] if sig != "HOLD" else data["reason"][:30])
-
-        # Chart
-        fig = build_chart(df, selected)
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Signal reason
-        if sig != "HOLD":
-            color = "#238636" if sig == "BUY" else "#DA3633"
-            st.markdown(
-                f"<div style='background:{color};padding:8px 14px;border-radius:6px;"
-                f"color:#fff;font-size:0.9rem'>"
-                f"<b>{sig}</b> — {data['reason']}</div>",
-                unsafe_allow_html=True,
-            )
+    if not display:
+        st.info(f"ไม่มีหุ้นที่ตรงกับ filter '{filter_opt}' ขณะนี้")
     else:
-        st.warning(f"{selected}: {data.get('error', 'ไม่มีข้อมูล')}")
+        cols = st.columns(config.DASHBOARD_COLS)
+        for i, symbol in enumerate(display):
+            card_data = all_data.get(symbol, {"symbol": symbol, "error": "ไม่มีข้อมูล"})
+            with cols[i % config.DASHBOARD_COLS]:
+                # ชื่อหุ้นเป็นปุ่มกด — คลิกเพื่อเปลี่ยนกราฟด้านบน
+                st.button(
+                    symbol,
+                    key=f"sel_{symbol}",
+                    use_container_width=True,
+                    on_click=_select,
+                    args=(symbol,),
+                )
+                render_card(card_data)
 
-    # ── Footer ─────────────────────────────────────────
+    # ── Footer ──────────────────────────────────────────
     st.divider()
     fl, fr = st.columns([3, 1])
     with fl:
-        st.caption(f"อัพเดทล่าสุด: {now_str} | Auto-refresh ทุก {config.DASHBOARD_REFRESH_SEC // 60} นาที")
+        refresh_min = config.REALTIME_REFRESH_SEC // 60 \
+                      if st.session_state.data_mode == "realtime" \
+                      else config.DASHBOARD_REFRESH_SEC // 60
+        mode_tag = "⚡ Real-time (Settrade)" if st.session_state.data_mode == "realtime" \
+                   else "📊 Daily (yfinance)"
+        st.caption(f"อัพเดทล่าสุด: {now_str} | {mode_tag} | Auto-refresh ทุก {refresh_min} นาที")
     with fr:
-        if st.button("🔄 Refresh ตอนนี้"):
+        if st.button("🔄 Refresh ตอนนี้", key="refresh_btn"):
             st.cache_data.clear()
             st.rerun()
 
+    refresh_sec = config.REALTIME_REFRESH_SEC \
+                  if st.session_state.data_mode == "realtime" \
+                  else config.DASHBOARD_REFRESH_SEC
     st.markdown(
-        f"<meta http-equiv='refresh' content='{config.DASHBOARD_REFRESH_SEC}'>",
+        f"<meta http-equiv='refresh' content='{refresh_sec}'>",
         unsafe_allow_html=True,
     )
 

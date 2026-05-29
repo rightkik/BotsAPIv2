@@ -6,7 +6,7 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8501.*LISTENING" 2^>nul') d
 timeout /t 1 >nul
 
 echo Starting dashboard...
-cd /d D:\BNbotsAPI\BNbotsAPI
+cd /d D:\BotsAPIv2
 start /B python -m streamlit run dashboard/app.py --server.headless true --browser.gatherUsageStats false
 
 timeout /t 4 >nul

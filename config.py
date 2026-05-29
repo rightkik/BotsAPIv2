@@ -5,10 +5,10 @@ load_dotenv()
 
 # ── Watchlist หุ้นไทย SET ──────────────────────────────
 WATCHLIST = [
-    "3BBIF", "CPAXT", "OSP",   "PTT",   "KBANK", "WHA",  "TU",   "PTTEP",
-    "BDMS",  "HANN",  "TOP",   "IVL",   "TASCO",
-    "STGT",  "TISCO", "LH",    "OR",    "RATCH", "PACO", "EGCO", "SCC",
-    "ORI",   "HANA",  "BAM",   "BANPU", "RCL",   "KKP",
+    "BAM",   "BANPU", "BDMS",  "CPAXT", "DELTA", "EGCO",  "HANA",
+    "HANN",  "IVL",   "KBANK", "KKP",   "LH",    "OR",    "ORI",
+    "OSP",   "PACO",  "PTTEP", "RATCH", "RCL",   "SCC",   "SCB",
+    "SET",   "STGT",  "TASCO", "TISCO", "TOP",   "TU",    "WHA",
 ]
 
 # ── Indicator Settings ─────────────────────────────────
@@ -46,9 +46,13 @@ ALERT_LOG       = "data/logs/alerts.csv"
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# ── Settrade (สำหรับ realtime price — Phase 2) ─────────
+# ── Settrade (Phase 2 — realtime price feed) ───────────
 SETTRADE_APP_ID     = os.getenv("SETTRADE_APP_ID", "")
 SETTRADE_APP_SECRET = os.getenv("SETTRADE_APP_SECRET", "")
-SETTRADE_USERNAME   = os.getenv("SETTRADE_USERNAME", "")
-SETTRADE_PASSWORD   = os.getenv("SETTRADE_PASSWORD", "")
+SETTRADE_APP_CODE   = os.getenv("SETTRADE_APP_CODE", "")
 SETTRADE_BROKER_ID  = os.getenv("SETTRADE_BROKER_ID", "")
+
+# ── Real-time mode settings ────────────────────────────
+REALTIME_INTERVAL   = "5"     # แท่ง 5 นาที (รองรับ: "1","5","15","30","60","D","W")
+REALTIME_LIMIT      = 300     # 300 แท่ง ≈ 5 วันทำการ (พอสำหรับ EMA50)
+REALTIME_REFRESH_SEC = 60     # dashboard refresh ทุก 1 นาทีใน real-time mode
