@@ -441,6 +441,76 @@ FILE STRUCTURE:
   └── dashboard/
       └── app.py              # Streamlit dashboard (SET Signal Monitor)
 
+--------------------------------------------------------------------------------
+[2026-05-29 → 2026-05-30]  Session 11 — Dashboard UX + Settrade API Phase 2
+--------------------------------------------------------------------------------
+WATCHLIST CHANGES:
+  ลบ  : 3BBIF → เพิ่ม SCB
+  ลบ  : PTT   → เพิ่ม DELTA
+  เพิ่ม: SET (SET Index — yfinance ticker ^SET.BK)
+  เรียง A-Z ทั้งหมด → 28 symbols:
+    BAM, BANPU, BDMS, CPAXT, DELTA, EGCO, HANA, HANN, IVL, KBANK, KKP,
+    LH, OR, ORI, OSP, PACO, PTTEP, RATCH, RCL, SCC, SCB, SET, STGT,
+    TASCO, TISCO, TOP, TU, WHA
+
+DASHBOARD REWRITE (dashboard/app.py):
+  Layout ใหม่ (บนลงล่าง):
+    Header → Summary bar → รายละเอียด+กราฟ → Stock Grid → Footer
+  การเปลี่ยนแปลงหลัก:
+    - กราฟ+รายละเอียดย้ายขึ้นมาเหนือ stock grid
+    - Default symbol = SET index
+    - Header มี selectbox เลือกหุ้นโดยตรง
+    - Card ชื่อหุ้นเป็นปุ่มกด (on_click callback) → กราฟเปลี่ยนทันที
+    - Mode toggle "📊 Daily / ⚡ Real-time" ใน header
+    - is_market_open() ใช้ zoneinfo Asia/Bangkok แทน datetime.now()
+    - Filter BUY/SELL/ใกล้ Zone ที่ไม่มีผลลัพธ์ → แสดง info แทนหน้าเปล่า
+    - load_signals_daily() / load_signals_realtime() แยก cache TTL
+
+BUGS FIXED:
+  - restart_dashboard.bat: path เก่า D:\BNbotsAPI → แก้เป็น D:\BotsAPIv2
+  - run_dashboard.bat: hardcode Python310 path → เปลี่ยนเป็น python
+  - data/fetcher.py: to_yf("SET") → "^SET.BK" (^SETI ถูก delist แล้ว)
+  - requirements.txt: settrade-sdk (ไม่มีบน PyPI) → settrade-v2>=2.2.1
+
+SETTRADE API PHASE 2 (data/settrade_fetcher.py — NEW):
+  - has_credentials()   : ตรวจ credentials ครบไหม
+  - _make_investor()    : สร้าง Investor จาก .env (login ทันที)
+  - _parse_candlestick(): แปลง API response → DataFrame (รองรับหลาย format)
+  - fetch_one_st()      : ดึง OHLCV 1 symbol จาก Settrade
+  - fetch_all_st()      : batch fetch ทุก symbol (ข้าม SET index)
+  - get_quote()         : ราคา real-time ล่าสุด 1 symbol
+
+CONFIG ADDITIONS (config.py):
+  SETTRADE_APP_CODE     = env (parameter ใหม่ใน settrade-v2 SDK)
+  REALTIME_INTERVAL     = "5"   (5 นาที)
+  REALTIME_LIMIT        = 300   (300 แท่ง ≈ 5 วันทำการ)
+  REALTIME_REFRESH_SEC  = 60    (dashboard refresh ทุก 1 นาที)
+
+SETTRADE SANDBOX TEST (2026-05-29):
+  BROKER_ID = SANDBOX → SDK ใช้ UAT server (open-api-test.settrade.com) อัตโนมัติ
+  ผล: APP_CODE="SANDBOX" ถูกต้อง แต่ APP_ID เป็น production key → "User not found"
+  สรุป: ต้องขอ sandbox credentials แยกจากโบรกเกอร์
+         BROKER_ID=SANDBOX, APP_CODE=SANDBOX, APP_ID/SECRET ต้องเป็น sandbox version
+
+DEPLOYMENT OPTIONS (สรุป):
+  ✅ Streamlit Community Cloud — ฟรี, deploy จาก GitHub, เหมาะ dashboard
+  ✅ Railway.app — $5/เดือน, รัน dashboard + monitor loop ได้ทั้งคู่
+  ❌ Vercel — serverless, ไม่รองรับ Streamlit/background process
+  ❌ WordPress shared hosting — PHP เท่านั้น
+
+NOT YET BUILT (Phase 2 — รอ sandbox credentials):
+  ⏳ Settrade sandbox credentials (ขอจากโบรกเกอร์)
+  ❌ Real-time mode ทดสอบจริง (fetch_all_st ยังไม่ได้รัน)
+  ❌ HTF weekly filter
+  ❌ Volume filter + RSI confirmation
+  ❌ LINE Notify integration
+  ❌ Deploy บน Streamlit Community Cloud
+
+HOW TO RUN:
+  python monitor.py                              # รัน SET signal monitor loop
+  streamlit run dashboard/app.py                 # เปิด dashboard → localhost:8501
+  restart_dashboard.bat                          # kill port 8501 แล้วเปิดใหม่
+
 ================================================================================
   END OF LOG
 ================================================================================
