@@ -511,6 +511,61 @@ HOW TO RUN:
   streamlit run dashboard/app.py                 # เปิด dashboard → localhost:8501
   restart_dashboard.bat                          # kill port 8501 แล้วเปิดใหม่
 
+--------------------------------------------------------------------------------
+[2026-05-30]  Session 12 — HTF Weekly Filter + Volume/RSI Confirmation
+--------------------------------------------------------------------------------
+COMPLETED:
+
+  #3 HTF Weekly Filter (ใช้งานจริงแล้ว):
+    - config.py: เพิ่ม HTF_PERIOD = "2y" (2 ปีของ weekly bars ≈ 104 แท่ง)
+    - monitor.py: ดึง weekly data ด้วย fetch_all(interval="1wk", period="2y")
+                  pass df_htf เข้า get_signal() ทุก symbol
+    - dashboard/app.py: load_signals_daily() ดึง HTF map + ส่งเข้า _build_results()
+    - strategy.py: check_htf_trend() + df_htf parameter มีอยู่แล้ว — เชื่อมต่อแล้ว
+
+    Logic: BUY ผ่านได้เฉพาะตอน weekly EMA20 > EMA50 (bullish)
+           SELL ผ่านได้เฉพาะตอน weekly EMA20 < EMA50 (bearish)
+
+  #4 Volume Filter + RSI Confirmation:
+    config.py:
+      RSI_BULL = 50     — BUY ต้องการ RSI > 50 (momentum confirmation)
+      RSI_BEAR = 50     — SELL ต้องการ RSI < 50
+      VOL_AVG_PERIOD = 20 — period สำหรับ volume MA
+
+    indicator.py:
+      add_all_indicators() เพิ่ม col: vol_ma (rolling 20-period volume MA)
+
+    strategy.py — get_signal() เพิ่ม hard filters:
+      BUY:  RSI < RSI_OB (70) + RSI > RSI_BULL (50) + volume > vol_ma + HTF bullish
+      SELL: RSI > RSI_OS (30) + RSI < RSI_BEAR (50) + volume > vol_ma + HTF bearish
+
+      หมายเหตุ: SET index (ไม่มี volume) ข้ามการเช็ค volume โดยอัตโนมัติ
+
+TESTS RUN:
+  ✅ import + logic test — KBANK, SCB ผ่าน
+  ✅ Full watchlist scan (28 ตัว):
+       Daily: 28/28  |  HTF: 27/28 (SET index ไม่มี weekly ที่มีพอ)
+       BUY: 0  SELL: 0  กรอง: 1 (CPAXT golden cross แต่ ADX ต่ำ)
+
+DASHBOARD UI IMPROVEMENTS (2026-05-30 — same session):
+  - Bullish ↑ → สีเขียว (#3FB950), Bearish ↓ → สีแดง (#F85149)
+    เปลี่ยน ic1.metric() เป็น custom HTML ใน "รายละเอียด" section
+  - Stock card เพิ่ม:
+      รับ (แนวรับ): midpoint ของ demand zone ที่ใกล้ราคาปัจจุบัน — สีเขียว
+      ต้าน (แนวต้าน): midpoint ของ supply zone ที่ใกล้ราคาปัจจุบัน — สีแดง
+      ราคาแนะนำ:
+        BUY/SELL signal → เป้า (ATR×2) + SL (ATR×1.5)
+        HOLD + ใกล้แนวรับ → เป้า (resistance zone)
+        HOLD + ใกล้แนวต้าน → แสดง tag เตือน
+  - CSS fix: collapse gap ระหว่าง name button กับ info card
+      margin-bottom: -8px + gap: 0 บน stVerticalBlock ใน stHorizontalBlock
+  - _build_results() เพิ่ม fields: support, resistance, suggest_entry, suggest_sl, suggest_tp
+
+NOT YET BUILT:
+  ⏳ Settrade sandbox credentials (รอจากโบรกเกอร์)
+  ❌ LINE Notify integration
+  ⬜ Deploy Streamlit Community Cloud  ← next
+
 ================================================================================
   END OF LOG
 ================================================================================

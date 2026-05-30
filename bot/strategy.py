@@ -148,6 +148,14 @@ def get_signal(df: pd.DataFrame, state: dict, df_htf: pd.DataFrame = None) -> di
     # ดึงค่า indicator แท่งปิดล่าสุด (iloc[-2] เพราะ iloc[-1] อาจยังไม่ปิด)
     last_rsi = float(df_clean['rsi'].iloc[-2])
 
+    # volume ณ แท่งปิดล่าสุด (SET index ไม่มี volume → ข้ามกรอง)
+    _last_vol    = df['volume'].iloc[-2]    if 'volume'  in df.columns else None
+    _last_vol_ma = df['vol_ma'].iloc[-2]    if 'vol_ma'  in df.columns else None
+    _has_volume  = (
+        _last_vol is not None and _last_vol_ma is not None
+        and pd.notna(_last_vol_ma) and float(_last_vol_ma) > 0
+    )
+
     crossover   = detect_ema_crossover(df)
     adx_ok      = check_adx_filter(df)
 
@@ -176,13 +184,19 @@ def get_signal(df: pd.DataFrame, state: dict, df_htf: pd.DataFrame = None) -> di
         if last_rsi >= config.RSI_OB:
             result["reason"] = f"Golden Cross แต่ RSI overbought ({last_rsi:.1f})"
             return result
+        if last_rsi < config.RSI_BULL:
+            result["reason"] = f"Golden Cross แต่ RSI momentum ต่ำ ({last_rsi:.1f} < {config.RSI_BULL})"
+            return result
+        if _has_volume and float(_last_vol) < float(_last_vol_ma):
+            result["reason"] = f"Golden Cross แต่ volume ต่ำกว่าค่าเฉลี่ย ({float(_last_vol):,.0f} < {float(_last_vol_ma):,.0f})"
+            return result
         if df_htf is not None and check_htf_trend(df_htf) != "bullish":
             htf_trend = check_htf_trend(df_htf)
             result["reason"] = f"Golden Cross แต่ HTF ({config.TIMEFRAME_HTF}) {htf_trend} — กรองทิ้ง"
             return result
 
         result["action"] = "BUY"
-        result["reason"] = "EMA Golden Cross + ADX ผ่าน"
+        result["reason"] = "EMA Golden Cross + ADX + RSI + Volume ผ่าน"
 
         # ยกระดับเป็น STRONG ถ้าเงื่อนไขเพิ่มเติมผ่าน
         strength_boosts = []
@@ -206,13 +220,19 @@ def get_signal(df: pd.DataFrame, state: dict, df_htf: pd.DataFrame = None) -> di
         if last_rsi <= config.RSI_OS:
             result["reason"] = f"Death Cross แต่ RSI oversold ({last_rsi:.1f})"
             return result
+        if last_rsi > config.RSI_BEAR:
+            result["reason"] = f"Death Cross แต่ RSI momentum ยังสูง ({last_rsi:.1f} > {config.RSI_BEAR})"
+            return result
+        if _has_volume and float(_last_vol) < float(_last_vol_ma):
+            result["reason"] = f"Death Cross แต่ volume ต่ำกว่าค่าเฉลี่ย ({float(_last_vol):,.0f} < {float(_last_vol_ma):,.0f})"
+            return result
         if df_htf is not None and check_htf_trend(df_htf) != "bearish":
             htf_trend = check_htf_trend(df_htf)
             result["reason"] = f"Death Cross แต่ HTF ({config.TIMEFRAME_HTF}) {htf_trend} — กรองทิ้ง"
             return result
 
         result["action"] = "SELL"
-        result["reason"] = "EMA Death Cross + ADX ผ่าน"
+        result["reason"] = "EMA Death Cross + ADX + RSI + Volume ผ่าน"
 
         strength_boosts = []
         if near_supply:

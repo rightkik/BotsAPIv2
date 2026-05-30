@@ -40,7 +40,7 @@ def _cooldown_ok(store: dict, symbol: str) -> bool:
     return (datetime.now() - last).total_seconds() >= config.ALERT_COOLDOWN_SEC
 
 
-def process(ohlcv_map: dict[str, object]) -> list[dict]:
+def process(ohlcv_map: dict[str, object], htf_map: dict[str, object] = None) -> list[dict]:
     results = []
     for symbol in config.WATCHLIST:
         df = ohlcv_map.get(symbol)
@@ -49,8 +49,16 @@ def process(ohlcv_map: dict[str, object]) -> list[dict]:
             continue
 
         try:
-            df    = add_all_indicators(df)
-            sig   = get_signal(df, DUMMY_STATE)
+            df = add_all_indicators(df)
+
+            # HTF weekly filter — คำนวณ indicators บน weekly df ถ้ามีข้อมูล
+            df_htf = None
+            if htf_map:
+                df_raw_htf = htf_map.get(symbol)
+                if df_raw_htf is not None and len(df_raw_htf) >= config.EMA_SLOW + 5:
+                    df_htf = add_all_indicators(df_raw_htf)
+
+            sig   = get_signal(df, DUMMY_STATE, df_htf=df_htf)
             last  = df.iloc[-2]    # แท่งปิดล่าสุดที่สมบูรณ์
             prev  = df.iloc[-3]
             price = float(df["close"].iloc[-1])
@@ -124,9 +132,10 @@ def run():
         print(f"[{now.strftime('%H:%M:%S')}] กำลังดึงข้อมูล...")
 
         ohlcv_map = fetch_all()
-        print(f"  ดึงได้ {len(ohlcv_map)}/{len(config.WATCHLIST)} ตัว")
+        htf_map   = fetch_all(interval=config.TIMEFRAME_HTF, period=config.HTF_PERIOD)
+        print(f"  ดึงได้ {len(ohlcv_map)}/{len(config.WATCHLIST)} ตัว  |  HTF: {len(htf_map)} ตัว")
 
-        results = process(ohlcv_map)
+        results = process(ohlcv_map, htf_map=htf_map)
         save_cache(results)
         _print_summary(results)
 

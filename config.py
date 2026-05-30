@@ -19,16 +19,20 @@ ADX_THRESHOLD   = 25
 RSI_PERIOD      = 14
 RSI_OB          = 70
 RSI_OS          = 30
+RSI_BULL        = 50    # BUY ต้องการ RSI > ค่านี้ (momentum ยืนยัน)
+RSI_BEAR        = 50    # SELL ต้องการ RSI < ค่านี้
 ATR_PERIOD      = 14
 ATR_SL_MULT     = 1.5
 ATR_TP_MULT     = 3.0
 PIVOT_LENGTH    = 5
+VOL_AVG_PERIOD  = 20    # period สำหรับ volume moving average
 ZONE_BUFFER     = 0.002     # 0.2% รอบ zone (หุ้นไทยมีกระดาน ticksize ชัดเจน)
 
 # ── Data Settings ──────────────────────────────────────
 TIMEFRAME       = "1d"      # daily — เหมาะกับ SET ไทย
-TIMEFRAME_HTF   = "1wk"     # weekly สำหรับ HTF filter (ยังไม่ใช้)
+TIMEFRAME_HTF   = "1wk"     # weekly สำหรับ HTF filter
 HISTORY_PERIOD  = "6mo"     # ย้อนหลัง 6 เดือน (~120 วัน พอสำหรับ EMA50)
+HTF_PERIOD      = "2y"      # 2 ปี (~104 weekly bars พอสำหรับ EMA50 weekly)
 
 # ── Monitor & Alert ────────────────────────────────────
 MONITOR_INTERVAL    = 300       # เช็คทุก 5 นาที (วินาที)

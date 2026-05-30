@@ -62,6 +62,13 @@ st.markdown("""
     border-bottom: none !important;
     color: #79C0FF !important;
   }
+  /* ปิดช่องว่างระหว่างปุ่มชื่อหุ้นกับ card ด้านล่าง */
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
+    margin-bottom: -8px !important;
+  }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,7 +96,7 @@ if "data_mode" not in st.session_state:
 # Data Loading
 # ══════════════════════════════════════════════════════
 
-def _build_results(ohlcv_map: dict, watchlist: list) -> dict:
+def _build_results(ohlcv_map: dict, watchlist: list, htf_map: dict = None) -> dict:
     """คำนวณ indicators + signal จาก ohlcv_map ที่รับมา"""
     results = {}
     for symbol in watchlist:
@@ -98,12 +105,46 @@ def _build_results(ohlcv_map: dict, watchlist: list) -> dict:
             results[symbol] = {"symbol": symbol, "error": "ข้อมูลไม่พอ"}
             continue
         try:
-            df2  = add_all_indicators(df)
-            sig  = get_signal(df2, DUMMY_STATE)
+            df2 = add_all_indicators(df)
+
+            df_htf = None
+            if htf_map:
+                df_raw_htf = htf_map.get(symbol)
+                if df_raw_htf is not None and len(df_raw_htf) >= config.EMA_SLOW + 5:
+                    df_htf = add_all_indicators(df_raw_htf)
+
+            sig  = get_signal(df2, DUMMY_STATE, df_htf=df_htf)
             last = df2.iloc[-2]
             prev = df2.iloc[-3]
             price = float(df["close"].iloc[-1])
             chg   = (float(last["close"]) - float(prev["close"])) / float(prev["close"]) * 100
+            atr   = float(last["atr"])
+
+            # คำนวณแนวรับ/แนวต้านจาก Supply/Demand zones
+            zones = find_supply_demand_zones(df2, config.PIVOT_LENGTH)
+            demand_mids = sorted([(h + l) / 2 for h, l in zones["demand"]], reverse=True)
+            supply_mids = sorted([(h + l) / 2 for h, l in zones["supply"]])
+            support    = next((m for m in demand_mids if m <= price * 1.02), demand_mids[0]  if demand_mids else None)
+            resistance = next((m for m in supply_mids if m >= price * 0.98), supply_mids[-1] if supply_mids else None)
+
+            # ราคาแนะนำตาม signal
+            sig_act = sig["action"]
+            if sig_act == "BUY":
+                suggest_entry = price
+                suggest_sl    = price - atr * config.ATR_SL_MULT
+                suggest_tp    = price + atr * 2.0
+            elif sig_act == "SELL":
+                suggest_entry = price
+                suggest_sl    = price + atr * config.ATR_SL_MULT
+                suggest_tp    = price - atr * 2.0
+            else:
+                suggest_entry = support
+                suggest_sl    = support * (1 - 0.03) if support else None
+                suggest_tp    = resistance
+
+            def _fmt(v):
+                return round(v, 2) if v is not None else None
+
             results[symbol] = {
                 "symbol":        symbol,
                 "price":         price,
@@ -112,12 +153,17 @@ def _build_results(ohlcv_map: dict, watchlist: list) -> dict:
                 "ema_slow":      float(last["ema_slow"]),
                 "adx":           float(last["adx"]),
                 "rsi":           float(last["rsi"]),
-                "atr":           float(last["atr"]),
+                "atr":           atr,
                 "signal":        sig["action"],
                 "strength":      sig["strength"],
                 "reason":        sig["reason"],
                 "near_demand":   sig["near_demand"],
                 "near_supply":   sig["near_supply"],
+                "support":       _fmt(support),
+                "resistance":    _fmt(resistance),
+                "suggest_entry": _fmt(suggest_entry),
+                "suggest_sl":    _fmt(suggest_sl),
+                "suggest_tp":    _fmt(suggest_tp),
                 "_df":           df2,
             }
         except Exception as e:
@@ -128,7 +174,9 @@ def _build_results(ohlcv_map: dict, watchlist: list) -> dict:
 @st.cache_data(ttl=config.DASHBOARD_REFRESH_SEC)
 def load_signals_daily():
     """Daily mode — ดึงข้อมูลจาก yfinance (cache 5 นาที)"""
-    return _build_results(fetch_all(), list(config.WATCHLIST))
+    ohlcv_map = fetch_all()
+    htf_map   = fetch_all(interval=config.TIMEFRAME_HTF, period=config.HTF_PERIOD)
+    return _build_results(ohlcv_map, list(config.WATCHLIST), htf_map=htf_map)
 
 
 @st.cache_data(ttl=config.REALTIME_REFRESH_SEC)
@@ -155,7 +203,7 @@ def render_card(data: dict):
     if "error" in data:
         st.markdown(f"""
         <div style="background:#161B22;border:1px solid #30363D;border-radius:0 0 8px 8px;
-                    padding:10px 12px;margin:0;min-height:82px">
+                    padding:10px 12px;margin:0;min-height:110px">
           <span style="color:#F85149;font-size:0.75rem">{data['error']}</span>
         </div>""", unsafe_allow_html=True)
         return
@@ -166,10 +214,14 @@ def render_card(data: dict):
     adx    = data["adx"]
     near_d = data["near_demand"]
     near_s = data["near_supply"]
+    sup    = data.get("support")
+    res    = data.get("resistance")
+    s_tp   = data.get("suggest_tp")
+    s_sl   = data.get("suggest_sl")
 
     strength_badge = ""
     if sig != "HOLD" and data["strength"] == "STRONG":
-        strength_badge = "<span style='font-size:0.65rem;color:#E3B341'>★ STRONG</span> "
+        strength_badge = "<span style='font-size:0.65rem;color:#E3B341'>★ STRONG&nbsp;</span>"
 
     near_tag = ""
     if near_d and sig == "HOLD":
@@ -183,9 +235,48 @@ def render_card(data: dict):
     adx_color = "#3FB950" if adx > config.ADX_THRESHOLD else "#E3B341"
     bg_color  = "#1A2332" if sig == "BUY" else ("#2A1A1A" if sig == "SELL" else "#161B22")
 
+    # แถวแนวรับ/แนวต้าน
+    sup_str = f"{sup:,.2f}" if sup else "-"
+    res_str = f"{res:,.2f}" if res else "-"
+    zone_row = (
+        f"<div style='font-size:0.69rem;display:flex;gap:10px;margin-top:4px'>"
+        f"<span>รับ: <span style='color:#3FB950;font-weight:600'>{sup_str}</span></span>"
+        f"<span>ต้าน: <span style='color:#F85149;font-weight:600'>{res_str}</span></span>"
+        f"</div>"
+    )
+
+    # แถวราคาแนะนำ
+    if sig == "BUY" and s_tp and s_sl:
+        price_row = (
+            f"<div style='font-size:0.67rem;margin-top:3px'>"
+            f"<span style='color:#E3B341'>เป้า: <b>{s_tp:,.2f}</b></span>"
+            f"&nbsp;&nbsp;<span style='color:#F85149'>SL: {s_sl:,.2f}</span>"
+            f"</div>"
+        )
+    elif sig == "SELL" and s_tp and s_sl:
+        price_row = (
+            f"<div style='font-size:0.67rem;margin-top:3px'>"
+            f"<span style='color:#E3B341'>เป้า: <b>{s_tp:,.2f}</b></span>"
+            f"&nbsp;&nbsp;<span style='color:#3FB950'>SL: {s_sl:,.2f}</span>"
+            f"</div>"
+        )
+    elif near_d and sig == "HOLD" and s_tp:
+        price_row = (
+            f"<div style='font-size:0.67rem;margin-top:3px;color:#8B949E'>"
+            f"{strength_badge}{near_tag}"
+            f"&nbsp;<span style='color:#E3B341'>เป้า: {s_tp:,.2f}</span>"
+            f"</div>"
+        )
+    else:
+        price_row = (
+            f"<div style='font-size:0.67rem;margin-top:3px;color:#8B949E'>"
+            f"{strength_badge}{near_tag}&nbsp;"
+            f"</div>"
+        )
+
     st.markdown(f"""
     <div style="background:{bg_color};border:1px solid {SIG_BORDER[sig]};
-                border-radius:0 0 8px 8px;padding:10px 12px;margin:0;min-height:82px">
+                border-radius:0 0 8px 8px;padding:10px 12px;margin:0;min-height:110px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="background:{SIG_COLOR[sig]};color:{SIG_TEXT[sig]};
                      padding:2px 7px;border-radius:4px;font-size:0.78rem;font-weight:700">{sig}</span>
@@ -198,7 +289,8 @@ def render_card(data: dict):
         <span>RSI: <span style="color:{rsi_color};font-weight:600">{rsi:.0f}</span></span>
         <span>ADX: <span style="color:{adx_color};font-weight:600">{adx:.0f}</span></span>
       </div>
-      <div style="font-size:0.67rem;margin-top:3px;color:#8B949E">{strength_badge}{near_tag}&nbsp;</div>
+      {zone_row}
+      {price_row}
     </div>""", unsafe_allow_html=True)
 
 
@@ -386,12 +478,18 @@ def main():
         sig = data["signal"]
 
         ic1, ic2, ic3, ic4, ic5 = st.columns(5)
-        ema_bull = data["ema_fast"] > data["ema_slow"]
-        ic1.metric(
-            f"EMA{config.EMA_FAST}/{config.EMA_SLOW}",
-            "Bullish ↑" if ema_bull else "Bearish ↓",
-            f"{data['ema_fast']:.2f} / {data['ema_slow']:.2f}",
-        )
+        ema_bull  = data["ema_fast"] > data["ema_slow"]
+        ema_color = "#3FB950" if ema_bull else "#F85149"
+        ema_label = "Bullish ↑" if ema_bull else "Bearish ↓"
+        with ic1:
+            st.markdown(f"""
+            <div style="padding:4px 0 0 0">
+              <div style="color:#8B949E;font-size:0.78rem;margin-bottom:2px">EMA{config.EMA_FAST}/{config.EMA_SLOW}</div>
+              <div style="color:{ema_color};font-size:1.35rem;font-weight:700;line-height:1.2">{ema_label}</div>
+              <div style="color:#8B949E;font-size:0.75rem;margin-top:2px">
+                ↑ {data['ema_fast']:.2f} / {data['ema_slow']:.2f}
+              </div>
+            </div>""", unsafe_allow_html=True)
         ic2.metric("ADX", f"{data['adx']:.1f}",
                    "Trending" if data["adx"] > config.ADX_THRESHOLD else "Sideways")
         ic3.metric("RSI", f"{data['rsi']:.1f}",

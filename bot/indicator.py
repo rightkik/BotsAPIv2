@@ -237,4 +237,7 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # Volume Delta
     df['vol_delta'] = calculate_volume_delta(df)
 
+    # Volume Moving Average — ใช้กรองสัญญาณที่ปริมาณซื้อขายต่ำเกินไป
+    df['vol_ma'] = df['volume'].rolling(config.VOL_AVG_PERIOD).mean()
+
     return df
