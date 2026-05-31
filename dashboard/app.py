@@ -422,7 +422,7 @@ def main():
     padding-right: 1rem !important;
     max-width: 100% !important;
   }
-  header[data-testid="stHeader"] { display:none !important; }
+  header[data-testid="stHeader"] { background-color: #0D1117 !important; }
   .stSelectbox label { color: #8B949E !important; }
   [data-testid="stMetricValue"] { font-size:1.3rem !important; }
   [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
