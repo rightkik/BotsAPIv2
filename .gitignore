@@ -11,6 +11,9 @@ data/logs/*.json
 data/logs/*.jsonl
 data/cache/
 
+# Temp log files จากการทดสอบ
+*.log
+
 # Python
 __pycache__/
 *.py[cod]
