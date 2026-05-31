@@ -6,4 +6,4 @@ streamlit>=1.28.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 schedule>=1.2.0
-settrade-v2>=2.2.1
+# settrade-v2>=2.2.1  # Phase 2 — ติดตั้งเฉพาะตอนใช้งาน Settrade (local only)
