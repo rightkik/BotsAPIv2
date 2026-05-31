@@ -39,7 +39,14 @@ st.markdown("""
   .stApp header { background-color: #0D1117; }
   h1,h2,h3 { color: #58A6FF !important; }
   hr { border-color: #21262D !important; margin: 0.4rem 0 !important; }
-  .block-container { padding-top:0.8rem !important; padding-bottom:0 !important; }
+  /* ใช้พื้นที่เต็มหน้าจอ */
+  .block-container {
+    padding-top: 0.8rem !important;
+    padding-bottom: 0 !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
+  }
   header[data-testid="stHeader"] { display:none !important; }
   .stSelectbox label { color: #8B949E !important; }
   [data-testid="stMetricValue"] { font-size:1.3rem !important; }
@@ -55,6 +62,7 @@ st.markdown("""
     padding: 5px 0 !important;
     border-radius: 6px 6px 0 0 !important;
     letter-spacing: 0.03em;
+    margin-bottom: 0 !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
     background: #21262D !important;
@@ -64,9 +72,13 @@ st.markdown("""
   }
   /* ปิดช่องว่างระหว่างปุ่มชื่อหุ้นกับ card ด้านล่าง */
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
-    margin-bottom: -8px !important;
+    margin-bottom: -16px !important;
+    padding-bottom: 0 !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+  }
+  div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {
     gap: 0 !important;
   }
 </style>
