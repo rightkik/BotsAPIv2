@@ -44,17 +44,6 @@ SIG_COLOR  = {"BUY": "#238636", "SELL": "#DA3633", "HOLD": "#21262D"}
 SIG_TEXT   = {"BUY": "#3FB950", "SELL": "#F85149", "HOLD": "#8B949E"}
 SIG_BORDER = {"BUY": "#3FB950", "SELL": "#F85149", "HOLD": "#30363D"}
 
-SECTORS = {
-    "⚡ พลังงาน":      ["BANPU", "EGCO", "OR", "PTTEP", "RATCH", "TASCO", "TOP"],
-    "🏦 การเงิน":      ["BAM", "KBANK", "KKP", "SCB", "TISCO"],
-    "🏭 อุตสาหกรรม":   ["DELTA", "HANA", "IVL", "PACO", "SCC", "STGT"],
-    "🛒 บริโภค":       ["CPAXT", "HANN", "OSP", "TU"],
-    "🏗️ อสังหา":       ["LH", "ORI", "WHA"],
-    "🏥 สุขภาพ":       ["BDMS"],
-    "🚢 ขนส่ง":        ["RCL"],
-    "📊 ดัชนี":        ["SET"],
-}
-
 # ══════════════════════════════════════════════════════
 # Session State
 # ══════════════════════════════════════════════════════
@@ -404,7 +393,7 @@ def main():
     now_str      = datetime.now(tz=BKK).strftime("%d/%m/%Y %H:%M")
 
     # ── Header ─────────────────────────────────────────
-    h1, h2, h3, h4 = st.columns([3.5, 1, 1, 0.8])
+    h1, h2, h3, h4, h5 = st.columns([2.8, 1, 1, 1, 1.5])
     with h1:
         tf_label = f"{config.REALTIME_INTERVAL}m" \
                    if st.session_state.data_mode == "realtime" else "Daily"
@@ -419,6 +408,7 @@ def main():
             unsafe_allow_html=True,
         )
     with h3:
+        # mode toggle
         mode_choice = st.selectbox(
             "mode",
             options=["📊 Daily", "⚡ Real-time"],
@@ -431,9 +421,21 @@ def main():
             st.cache_data.clear()
             st.rerun()
     with h4:
-        if st.button("🔄", key="refresh_top", help="Refresh ข้อมูล"):
-            st.cache_data.clear()
-            st.rerun()
+        filter_opt = st.selectbox(
+            "filter", ["ทั้งหมด", "BUY", "SELL", "ใกล้ Zone"],
+            label_visibility="collapsed",
+        )
+    with h5:
+        # selectbox sync กับ session_state.selected
+        all_syms = list(config.WATCHLIST)
+        cur_idx  = all_syms.index(st.session_state.selected) \
+                   if st.session_state.selected in all_syms else 0
+        chosen = st.selectbox(
+            "เลือกหุ้น", options=all_syms, index=cur_idx,
+            label_visibility="collapsed",
+        )
+        if chosen != st.session_state.selected:
+            st.session_state.selected = chosen
 
     st.divider()
 
@@ -470,127 +472,100 @@ def main():
     st.divider()
 
     # ══════════════════════════════════════════════════
-    # Tabs
+    # รายละเอียด + กราฟ  (อยู่เหนือ grid)
     # ══════════════════════════════════════════════════
-    tab_ov, tab_dt = st.tabs(["📊 Overview — ทั้งหมด", "📈 รายละเอียด"])
+    selected = st.session_state.selected
+    st.markdown(f"### รายละเอียด — {selected}")
 
-    # ── Tab 1: Sector Grid ─────────────────────────────
-    with tab_ov:
-        fc1, fc2 = st.columns([1, 5])
-        with fc1:
-            filter_opt = st.selectbox(
-                "filter", ["ทั้งหมด", "BUY", "SELL", "ใกล้ Zone"],
-                label_visibility="collapsed",
-            )
+    data = all_data.get(selected, {})
+    if "error" not in data and "_df" in data:
+        df  = data["_df"]
+        sig = data["signal"]
 
-        for sector_name, sector_syms in SECTORS.items():
-            # กรอง symbol ตาม filter
-            if filter_opt == "BUY":
-                display = [s for s in sector_syms if all_data.get(s, {}).get("signal") == "BUY"]
-            elif filter_opt == "SELL":
-                display = [s for s in sector_syms if all_data.get(s, {}).get("signal") == "SELL"]
-            elif filter_opt == "ใกล้ Zone":
-                display = [s for s in sector_syms
-                           if all_data.get(s, {}).get("near_demand") or all_data.get(s, {}).get("near_supply")]
-            else:
-                display = [s for s in sector_syms if s in all_data]
+        ic1, ic2, ic3, ic4, ic5 = st.columns(5)
+        ema_bull  = data["ema_fast"] > data["ema_slow"]
+        ema_color = "#3FB950" if ema_bull else "#F85149"
+        ema_label = "Bullish ↑" if ema_bull else "Bearish ↓"
+        with ic1:
+            st.markdown(f"""
+            <div style="padding:4px 0 0 0">
+              <div style="color:#8B949E;font-size:0.78rem;margin-bottom:2px">EMA{config.EMA_FAST}/{config.EMA_SLOW}</div>
+              <div style="color:{ema_color};font-size:1.35rem;font-weight:700;line-height:1.2">{ema_label}</div>
+              <div style="color:#8B949E;font-size:0.75rem;margin-top:2px">
+                ↑ {data['ema_fast']:.2f} / {data['ema_slow']:.2f}
+              </div>
+            </div>""", unsafe_allow_html=True)
+        ic2.metric("ADX", f"{data['adx']:.1f}",
+                   "Trending" if data["adx"] > config.ADX_THRESHOLD else "Sideways")
+        ic3.metric("RSI", f"{data['rsi']:.1f}",
+                   "Overbought" if data["rsi"] > config.RSI_OB else
+                   ("Oversold" if data["rsi"] < config.RSI_OS else "Normal"))
+        ic4.metric("ATR", f"{data['atr']:.2f}")
+        ic5.metric("Signal", sig,
+                   data["strength"] if sig != "HOLD" else data["reason"][:30])
 
-            if not display:
-                continue
+        fig = build_chart(df, selected)
+        st.plotly_chart(fig, use_container_width=True)
 
+        if sig != "HOLD":
+            color = "#238636" if sig == "BUY" else "#DA3633"
             st.markdown(
-                f"<div style='color:#8B949E;font-size:0.8rem;font-weight:600;"
-                f"letter-spacing:0.05em;margin:12px 0 4px 0'>{sector_name}</div>",
+                f"<div style='background:{color};padding:8px 14px;border-radius:6px;"
+                f"color:#fff;font-size:0.9rem'>"
+                f"<b>{sig}</b> — {data['reason']}</div>",
                 unsafe_allow_html=True,
             )
-            cols = st.columns(config.DASHBOARD_COLS)
-            for i, symbol in enumerate(display):
-                card_data = all_data.get(symbol, {"symbol": symbol, "error": "ไม่มีข้อมูล"})
-                with cols[i % config.DASHBOARD_COLS]:
-                    st.button(
-                        symbol,
-                        key=f"ov_{symbol}",
-                        use_container_width=True,
-                        on_click=_select,
-                        args=(symbol,),
-                    )
-                    render_card(card_data)
+    else:
+        err_msg = data.get("error", "ไม่มีข้อมูล") if data else "กำลังโหลด..."
+        st.warning(f"{selected}: {err_msg}")
 
-        if filter_opt != "ทั้งหมด":
-            total = sum(
-                1 for d in all_data.values()
-                if (filter_opt == "BUY" and d.get("signal") == "BUY") or
-                   (filter_opt == "SELL" and d.get("signal") == "SELL") or
-                   (filter_opt == "ใกล้ Zone" and (d.get("near_demand") or d.get("near_supply")))
-            )
-            if total == 0:
-                st.info(f"ไม่มีหุ้นที่ตรงกับ filter '{filter_opt}' ขณะนี้")
+    st.divider()
 
-    # ── Tab 2: Detail + Chart ──────────────────────────
-    with tab_dt:
-        all_syms = list(config.WATCHLIST)
-        cur_idx  = all_syms.index(st.session_state.selected) \
-                   if st.session_state.selected in all_syms else 0
-        chosen = st.selectbox(
-            "เลือกหุ้น", options=all_syms, index=cur_idx,
-            label_visibility="collapsed",
-        )
-        if chosen != st.session_state.selected:
-            st.session_state.selected = chosen
+    # ══════════════════════════════════════════════════
+    # Stock Grid
+    # ══════════════════════════════════════════════════
 
-        selected = st.session_state.selected
-        st.markdown(f"### {selected}")
+    if filter_opt == "BUY":
+        display = [s for s in config.WATCHLIST if all_data.get(s, {}).get("signal") == "BUY"]
+    elif filter_opt == "SELL":
+        display = [s for s in config.WATCHLIST if all_data.get(s, {}).get("signal") == "SELL"]
+    elif filter_opt == "ใกล้ Zone":
+        display = [s for s in config.WATCHLIST
+                   if all_data.get(s, {}).get("near_demand") or all_data.get(s, {}).get("near_supply")]
+    else:
+        display = list(config.WATCHLIST)
 
-        data = all_data.get(selected, {})
-        if "error" not in data and "_df" in data:
-            df  = data["_df"]
-            sig = data["signal"]
-
-            ic1, ic2, ic3, ic4, ic5 = st.columns(5)
-            ema_bull  = data["ema_fast"] > data["ema_slow"]
-            ema_color = "#3FB950" if ema_bull else "#F85149"
-            ema_label = "Bullish ↑" if ema_bull else "Bearish ↓"
-            with ic1:
-                st.markdown(f"""
-                <div style="padding:4px 0 0 0">
-                  <div style="color:#8B949E;font-size:0.78rem;margin-bottom:2px">EMA{config.EMA_FAST}/{config.EMA_SLOW}</div>
-                  <div style="color:{ema_color};font-size:1.35rem;font-weight:700;line-height:1.2">{ema_label}</div>
-                  <div style="color:#8B949E;font-size:0.75rem;margin-top:2px">
-                    {data['ema_fast']:.2f} / {data['ema_slow']:.2f}
-                  </div>
-                </div>""", unsafe_allow_html=True)
-            ic2.metric("ADX", f"{data['adx']:.1f}",
-                       "Trending" if data["adx"] > config.ADX_THRESHOLD else "Sideways")
-            ic3.metric("RSI", f"{data['rsi']:.1f}",
-                       "Overbought" if data["rsi"] > config.RSI_OB else
-                       ("Oversold" if data["rsi"] < config.RSI_OS else "Normal"))
-            ic4.metric("ATR", f"{data['atr']:.2f}")
-            ic5.metric("Signal", sig,
-                       data["strength"] if sig != "HOLD" else data["reason"][:30])
-
-            fig = build_chart(df, selected)
-            st.plotly_chart(fig, use_container_width=True)
-
-            if sig != "HOLD":
-                color = "#238636" if sig == "BUY" else "#DA3633"
-                st.markdown(
-                    f"<div style='background:{color};padding:8px 14px;border-radius:6px;"
-                    f"color:#fff;font-size:0.9rem'>"
-                    f"<b>{sig}</b> — {data['reason']}</div>",
-                    unsafe_allow_html=True,
+    if not display:
+        st.info(f"ไม่มีหุ้นที่ตรงกับ filter '{filter_opt}' ขณะนี้")
+    else:
+        cols = st.columns(config.DASHBOARD_COLS)
+        for i, symbol in enumerate(display):
+            card_data = all_data.get(symbol, {"symbol": symbol, "error": "ไม่มีข้อมูล"})
+            with cols[i % config.DASHBOARD_COLS]:
+                # ชื่อหุ้นเป็นปุ่มกด — คลิกเพื่อเปลี่ยนกราฟด้านบน
+                st.button(
+                    symbol,
+                    key=f"sel_{symbol}",
+                    use_container_width=True,
+                    on_click=_select,
+                    args=(symbol,),
                 )
-        else:
-            err_msg = data.get("error", "ไม่มีข้อมูล") if data else "กำลังโหลด..."
-            st.warning(f"{selected}: {err_msg}")
+                render_card(card_data)
 
     # ── Footer ──────────────────────────────────────────
     st.divider()
-    refresh_min = config.REALTIME_REFRESH_SEC // 60 \
-                  if st.session_state.data_mode == "realtime" \
-                  else config.DASHBOARD_REFRESH_SEC // 60
-    mode_tag = "⚡ Real-time (Settrade)" if st.session_state.data_mode == "realtime" \
-               else "📊 Daily (yfinance)"
-    st.caption(f"อัพเดทล่าสุด: {now_str} | {mode_tag} | Auto-refresh ทุก {refresh_min} นาที")
+    fl, fr = st.columns([3, 1])
+    with fl:
+        refresh_min = config.REALTIME_REFRESH_SEC // 60 \
+                      if st.session_state.data_mode == "realtime" \
+                      else config.DASHBOARD_REFRESH_SEC // 60
+        mode_tag = "⚡ Real-time (Settrade)" if st.session_state.data_mode == "realtime" \
+                   else "📊 Daily (yfinance)"
+        st.caption(f"อัพเดทล่าสุด: {now_str} | {mode_tag} | Auto-refresh ทุก {refresh_min} นาที")
+    with fr:
+        if st.button("🔄 Refresh ตอนนี้", key="refresh_btn"):
+            st.cache_data.clear()
+            st.rerun()
 
     refresh_sec = config.REALTIME_REFRESH_SEC \
                   if st.session_state.data_mode == "realtime" \
