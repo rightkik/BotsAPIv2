@@ -4,6 +4,8 @@ dashboard/app.py — SET Signal Monitor Dashboard
 รัน: streamlit run dashboard/app.py
 """
 
+import base64
+import json
 import os
 import sys
 from datetime import datetime
@@ -11,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 from plotly.subplots import make_subplots
 
@@ -21,6 +24,43 @@ from bot.indicator import add_all_indicators, find_supply_demand_zones
 from bot.strategy  import get_signal
 from data.fetcher  import fetch_all
 from data.settrade_fetcher import fetch_all_st, has_credentials
+
+# ══════════════════════════════════════════════════════
+# GitHub API
+# ══════════════════════════════════════════════════════
+
+def commit_watchlist(watchlist: list) -> tuple[bool, str]:
+    """Commit data/watchlist.json ขึ้น GitHub — trigger Streamlit Cloud redeploy"""
+    token  = config.GITHUB_TOKEN
+    repo   = config.GITHUB_REPO
+    branch = config.GITHUB_BRANCH
+
+    if not token:
+        return False, "ไม่พบ GITHUB_TOKEN — ตั้งค่าใน Streamlit Secrets ก่อน"
+
+    api_url = f"https://api.github.com/repos/{repo}/contents/data/watchlist.json"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    r = requests.get(api_url, headers=headers, params={"ref": branch}, timeout=10)
+    sha = r.json().get("sha") if r.status_code == 200 else None
+
+    content = json.dumps(sorted(watchlist), ensure_ascii=False, indent=2)
+    payload = {
+        "message": f"update watchlist ({len(watchlist)} stocks)",
+        "content": base64.b64encode(content.encode()).decode(),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    r = requests.put(api_url, headers=headers, json=payload, timeout=10)
+    if r.status_code in (200, 201):
+        return True, f"บันทึกแล้ว ({len(watchlist)} ตัว) — Streamlit Cloud กำลัง redeploy ~2 นาที"
+    return False, f"GitHub error {r.status_code}: {r.json().get('message', '')}"
+
 
 # ══════════════════════════════════════════════════════
 # Page Config
@@ -418,6 +458,47 @@ def main():
         st.session_state.selected = "SET"
     if "data_mode" not in st.session_state:
         st.session_state.data_mode = "daily"
+    if "edit_wl" not in st.session_state:
+        st.session_state.edit_wl = list(config.WATCHLIST)
+
+    # ── Sidebar: Watchlist Manager ──────────────────────
+    with st.sidebar:
+        st.markdown("### ⚙️ จัดการ Watchlist")
+        st.caption(f"ปัจจุบัน {len(st.session_state.edit_wl)} ตัว")
+        st.divider()
+
+        to_del = None
+        for sym in st.session_state.edit_wl:
+            c1, c2 = st.columns([5, 1])
+            c1.markdown(f"**{sym}**")
+            if c2.button("✕", key=f"del_{sym}", help=f"ลบ {sym}"):
+                to_del = sym
+        if to_del:
+            st.session_state.edit_wl.remove(to_del)
+            st.rerun()
+
+        st.divider()
+        new_sym = st.text_input("เพิ่มหุ้น", placeholder="เช่น PTT", label_visibility="collapsed").strip().upper()
+        if st.button("+ เพิ่ม", use_container_width=True) and new_sym:
+            if new_sym not in st.session_state.edit_wl:
+                st.session_state.edit_wl.append(new_sym)
+                st.session_state.edit_wl.sort()
+                st.rerun()
+            else:
+                st.warning(f"{new_sym} มีอยู่แล้ว")
+
+        st.divider()
+        if st.button("💾 บันทึกขึ้น GitHub", type="primary", use_container_width=True):
+            with st.spinner("กำลัง commit..."):
+                ok, msg = commit_watchlist(st.session_state.edit_wl)
+            if ok:
+                st.success(msg)
+            else:
+                st.error(msg)
+
+        if st.button("↺ รีเซ็ต", use_container_width=True, help="คืนค่าเป็น watchlist ปัจจุบัน"):
+            st.session_state.edit_wl = list(config.WATCHLIST)
+            st.rerun()
 
     market_open  = is_market_open()
     market_label = "🟢 ตลาดเปิด" if market_open else "🔴 ตลาดปิด"
