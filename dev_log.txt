@@ -566,6 +566,49 @@ NOT YET BUILT:
   ❌ LINE Notify integration
   ⬜ Deploy Streamlit Community Cloud  ← next
 
+--------------------------------------------------------------------------------
+[2026-05-31]  Session 13 — Deploy + Dashboard UI Fixes + Watchlist Manager
+--------------------------------------------------------------------------------
+COMPLETED:
+
+  DEPLOY — Streamlit Community Cloud:
+    - สร้าง streamlit_app.py ที่ root เพื่อ deploy บน cloud
+    - แก้ session_state init ให้อยู่ใน main() (cloud compatibility)
+    - แก้ CSS injection ให้อยู่ใน main() (inject ทุก rerun)
+    - แก้ requirements.txt: comment out settrade-v2 (ไม่ available บน Linux)
+    - URL: https://settrade.streamlit.app/ (private — owner only)
+
+  DASHBOARD UI FIXES:
+    - ย้ายชื่อหุ้นเข้า render_card() HTML header — ไม่ truncate
+    - Near-zone highlight: demand = พื้นเขียว, supply = พื้นแดง ใน name row
+    - แก้ CSS transparent button ที่ทำให้ selectbox/refresh ถูกทับ
+    - ปุ่ม "📈 กราฟ" ใต้แต่ละ card แทน transparent overlay
+    - แก้ padding-top: 0.8rem → 3.5rem รองรับ Streamlit header ที่ visible
+
+  WATCHLIST MANAGER (GitHub API):
+    - สร้าง data/watchlist.json — source of truth สำหรับ watchlist
+    - config.py อ่านจาก watchlist.json อัตโนมัติ (fallback → hardcoded list)
+    - Sidebar "⚙️ จัดการ Watchlist": เพิ่ม/ลบหุ้น + บันทึกขึ้น GitHub
+    - commit_watchlist() → GitHub API PUT → Streamlit Cloud redeploy อัตโนมัติ
+    - ต้องตั้ง GITHUB_TOKEN ใน Streamlit Secrets (Fine-grained, Contents R/W)
+
+  WATCHLIST UPDATE:
+    - ลบ: DELTA, IVL, OSP, RCL
+    - เพิ่ม: AE, SCGD, TTA (LH มีอยู่แล้ว)
+    - ปัจจุบัน 27 ตัว เรียง A-Z
+
+  MONITOR TEST:
+    - ทดสอบ monitor.py บนเครื่อง: ผ่านทุกขั้นตอน ✅
+    - 28/28 daily, 27/28 HTF (SET index ไม่มี weekly — ปกติ)
+    - NEAR (6): BDMS, HANN, KBANK, RATCH, SCC, TISCO
+    - resource: ~160 MB RAM, ~1.7 MB/รอบ, ~31 วิ/รอบ
+    - run_monitor.bat: แก้ Python path เป็น python (จาก hardcoded path เก่า)
+
+NOT YET RESOLVED:
+    ⏳ Watchlist manager: ยืนยันว่า GitHub commit + Streamlit redeploy ทำงานได้จริง
+    ⏳ Settrade sandbox credentials (รอจากโบรกเกอร์)
+    ❌ LINE Notify integration
+
 ================================================================================
   END OF LOG
 ================================================================================

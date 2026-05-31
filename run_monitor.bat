@@ -1,4 +1,5 @@
 @echo off
 cd /d %~dp0
-C:\Users\Chidchai.k\AppData\Local\Programs\Python\Python310\python.exe monitor.py
+echo SET Signal Monitor กำลังเริ่มต้น...
+python monitor.py
 pause
