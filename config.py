@@ -5,10 +5,10 @@ load_dotenv()
 
 # ── Watchlist หุ้นไทย SET ──────────────────────────────
 WATCHLIST = [
-    "BAM",   "BANPU", "BDMS",  "CPAXT", "DELTA", "EGCO",  "HANA",
-    "HANN",  "IVL",   "KBANK", "KKP",   "LH",    "OR",    "ORI",
-    "OSP",   "PACO",  "PTTEP", "RATCH", "RCL",   "SCC",   "SCB",
-    "SET",   "STGT",  "TASCO", "TISCO", "TOP",   "TU",    "WHA",
+    "AE",    "BAM",   "BANPU", "BDMS",  "CPAXT", "EGCO",  "HANA",
+    "HANN",  "KBANK", "KKP",   "LH",    "OR",    "ORI",   "PACO",
+    "PTTEP", "RATCH", "SCC",   "SCB",   "SCGD",  "SET",   "STGT",
+    "TASCO", "TISCO", "TOP",   "TTA",   "TU",    "WHA",
 ]
 
 # ── Indicator Settings ─────────────────────────────────
