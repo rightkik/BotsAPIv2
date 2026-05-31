@@ -33,57 +33,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-st.markdown("""
-<style>
-  .stApp { background-color: #0D1117; color: #E6EDF3; }
-  .stApp header { background-color: #0D1117; }
-  h1,h2,h3 { color: #58A6FF !important; }
-  hr { border-color: #21262D !important; margin: 0.4rem 0 !important; }
-  /* ใช้พื้นที่เต็มหน้าจอ */
-  .block-container {
-    padding-top: 0.8rem !important;
-    padding-bottom: 0 !important;
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-    max-width: 100% !important;
-  }
-  header[data-testid="stHeader"] { display:none !important; }
-  .stSelectbox label { color: #8B949E !important; }
-  [data-testid="stMetricValue"] { font-size:1.3rem !important; }
-  [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
-  /* card select buttons — top of each stock card */
-  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
-    background: #1C2128 !important;
-    border: 1px solid #30363D !important;
-    border-bottom: none !important;
-    color: #58A6FF !important;
-    font-weight: 700 !important;
-    font-size: 0.88rem !important;
-    padding: 5px 0 !important;
-    border-radius: 6px 6px 0 0 !important;
-    letter-spacing: 0.03em;
-    margin-bottom: 0 !important;
-  }
-  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
-    background: #21262D !important;
-    border-color: #58A6FF !important;
-    border-bottom: none !important;
-    color: #79C0FF !important;
-  }
-  /* ปิดช่องว่างระหว่างปุ่มชื่อหุ้นกับ card ด้านล่าง */
-  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
-    margin-bottom: -16px !important;
-    padding-bottom: 0 !important;
-  }
-  div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-  }
-  div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-  }
-</style>
-""", unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════════
 # Constants
 # ══════════════════════════════════════════════════════
@@ -390,6 +339,50 @@ def _select(sym: str):
 # ══════════════════════════════════════════════════════
 
 def main():
+    st.markdown("""
+<style>
+  .stApp { background-color: #0D1117; color: #E6EDF3; }
+  .stApp header { background-color: #0D1117; }
+  h1,h2,h3 { color: #58A6FF !important; }
+  hr { border-color: #21262D !important; margin: 0.4rem 0 !important; }
+  .block-container {
+    padding-top: 0.8rem !important;
+    padding-bottom: 0 !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
+  }
+  header[data-testid="stHeader"] { display:none !important; }
+  .stSelectbox label { color: #8B949E !important; }
+  [data-testid="stMetricValue"] { font-size:1.3rem !important; }
+  [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
+    background: #1C2128 !important;
+    border: 1px solid #30363D !important;
+    border-bottom: none !important;
+    color: #58A6FF !important;
+    font-weight: 700 !important;
+    font-size: 0.88rem !important;
+    padding: 5px 0 !important;
+    border-radius: 6px 6px 0 0 !important;
+    letter-spacing: 0.03em;
+    margin-bottom: 0 !important;
+  }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
+    background: #21262D !important;
+    border-color: #58A6FF !important;
+    border-bottom: none !important;
+    color: #79C0FF !important;
+  }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
+    margin-bottom: -16px !important;
+    padding-bottom: 0 !important;
+  }
+  div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] { gap: 0 !important; }
+  div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] { gap: 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
     if "selected" not in st.session_state:
         st.session_state.selected = "SET"
     if "data_mode" not in st.session_state:
