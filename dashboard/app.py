@@ -416,7 +416,7 @@ def main():
   h1,h2,h3 { color: #58A6FF !important; }
   hr { border-color: #21262D !important; margin: 0.4rem 0 !important; }
   .block-container {
-    padding-top: 0.8rem !important;
+    padding-top: 3.5rem !important;
     padding-bottom: 0 !important;
     padding-left: 1rem !important;
     padding-right: 1rem !important;
@@ -481,11 +481,15 @@ def main():
                 st.warning(f"{new_sym} มีอยู่แล้ว")
 
         st.divider()
-        if st.button("💾 บันทึกขึ้น GitHub", type="primary", use_container_width=True):
+        token_ok = bool(config.GITHUB_TOKEN)
+        if not token_ok:
+            st.warning("⚠️ ไม่พบ GITHUB_TOKEN ใน Secrets")
+        if st.button("💾 บันทึกขึ้น GitHub", type="primary", use_container_width=True, disabled=not token_ok):
             with st.spinner("กำลัง commit..."):
                 ok, msg = commit_watchlist(st.session_state.edit_wl)
             if ok:
                 st.success(msg)
+                st.info("หลัง redeploy ~2 นาที กด Refresh หรือ reload หน้า")
             else:
                 st.error(msg)
 
