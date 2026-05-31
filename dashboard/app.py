@@ -87,11 +87,6 @@ SIG_BORDER = {"BUY": "#3FB950", "SELL": "#F85149", "HOLD": "#30363D"}
 # Session State
 # ══════════════════════════════════════════════════════
 
-if "selected" not in st.session_state:
-    st.session_state.selected = "SET"
-if "data_mode" not in st.session_state:
-    st.session_state.data_mode = "daily"
-
 # ══════════════════════════════════════════════════════
 # Data Loading
 # ══════════════════════════════════════════════════════
@@ -383,6 +378,11 @@ def _select(sym: str):
 # ══════════════════════════════════════════════════════
 
 def main():
+    if "selected" not in st.session_state:
+        st.session_state.selected = "SET"
+    if "data_mode" not in st.session_state:
+        st.session_state.data_mode = "daily"
+
     market_open  = is_market_open()
     market_label = "🟢 ตลาดเปิด" if market_open else "🔴 ตลาดปิด"
     now_str      = datetime.now(tz=BKK).strftime("%d/%m/%Y %H:%M")
