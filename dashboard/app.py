@@ -362,11 +362,15 @@ def main():
     border-bottom: none !important;
     color: #58A6FF !important;
     font-weight: 700 !important;
-    font-size: 0.88rem !important;
-    padding: 5px 0 !important;
+    font-size: 0.85rem !important;
+    padding: 5px 6px !important;
     border-radius: 6px 6px 0 0 !important;
-    letter-spacing: 0.03em;
+    letter-spacing: 0 !important;
     margin-bottom: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: clip !important;
+    width: 100% !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
     background: #21262D !important;
@@ -534,6 +538,26 @@ def main():
                    if all_data.get(s, {}).get("near_demand") or all_data.get(s, {}).get("near_supply")]
     else:
         display = list(config.WATCHLIST)
+
+    # ── inject CSS highlight สำหรับหุ้นใกล้ zone ─────────
+    zone_css = ""
+    for sym, d in all_data.items():
+        if d.get("near_demand"):
+            zone_css += (
+                f'button[aria-label="{sym}"] {{'
+                f'background:#1A3020 !important;'
+                f'border-color:#3FB950 !important;'
+                f'color:#3FB950 !important;}}'
+            )
+        elif d.get("near_supply"):
+            zone_css += (
+                f'button[aria-label="{sym}"] {{'
+                f'background:#301A1A !important;'
+                f'border-color:#F85149 !important;'
+                f'color:#F85149 !important;}}'
+            )
+    if zone_css:
+        st.markdown(f"<style>{zone_css}</style>", unsafe_allow_html=True)
 
     if not display:
         st.info(f"ไม่มีหุ้นที่ตรงกับ filter '{filter_opt}' ขณะนี้")
