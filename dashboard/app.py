@@ -200,7 +200,7 @@ def render_card(data: dict):
 
     if "error" in data:
         st.markdown(f"""
-        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px;
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px 8px 0 0;
                     padding:10px 12px;margin:0;min-height:144px">
           <div style="font-weight:700;color:#58A6FF;font-size:0.88rem;margin-bottom:6px">{symbol}</div>
           <span style="color:#F85149;font-size:0.75rem">{data['error']}</span>
@@ -301,7 +301,7 @@ def render_card(data: dict):
       </div>
       <div style="background:{bg_color};border:1px solid {SIG_BORDER[sig]};
                   border-top:1px solid {name_border};
-                  border-radius:0 0 8px 8px;padding:10px 12px;min-height:110px">
+                  border-radius:0;padding:10px 12px;min-height:110px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="background:{SIG_COLOR[sig]};color:{SIG_TEXT[sig]};
                        padding:2px 7px;border-radius:4px;font-size:0.78rem;font-weight:700">{sig}</span>
@@ -426,31 +426,24 @@ def main():
   .stSelectbox label { color: #8B949E !important; }
   [data-testid="stMetricValue"] { font-size:1.3rem !important; }
   [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
-  /* button โปร่งใส — ทำหน้าที่ click เท่านั้น ชื่อหุ้นอยู่ใน card HTML แทน */
+  /* ปุ่ม "ดูกราฟ" ใต้แต่ละ card */
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
-    background: transparent !important;
-    border: none !important;
-    color: transparent !important;
-    height: 34px !important;
-    padding: 0 !important;
+    background: #161B22 !important;
+    border: 1px solid #30363D !important;
+    border-top: none !important;
+    color: #8B949E !important;
+    font-size: 0.75rem !important;
+    padding: 3px 0 !important;
+    border-radius: 0 0 8px 8px !important;
     margin: 0 !important;
-    cursor: pointer !important;
     width: 100% !important;
-    box-shadow: none !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
-    background: rgba(255,255,255,0.06) !important;
-    border: none !important;
-    color: transparent !important;
+    background: #21262D !important;
+    color: #58A6FF !important;
+    border-color: #58A6FF !important;
+    border-top: none !important;
   }
-  div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
-    margin-bottom: -34px !important;
-    padding-bottom: 0 !important;
-    position: relative !important;
-    z-index: 5 !important;
-  }
-  div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] { gap: 0 !important; }
-  div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] { gap: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -654,15 +647,14 @@ def main():
         for i, symbol in enumerate(display):
             card_data = all_data.get(symbol, {"symbol": symbol, "error": "ไม่มีข้อมูล"})
             with cols[i % config.DASHBOARD_COLS]:
-                # ชื่อหุ้นเป็นปุ่มกด — คลิกเพื่อเปลี่ยนกราฟด้านบน
+                render_card(card_data)
                 st.button(
-                    symbol,
+                    "📈 กราฟ",
                     key=f"sel_{symbol}",
                     use_container_width=True,
                     on_click=_select,
                     args=(symbol,),
                 )
-                render_card(card_data)
 
     # ── Footer ──────────────────────────────────────────
     st.divider()
