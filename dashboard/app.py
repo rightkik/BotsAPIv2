@@ -155,11 +155,14 @@ def is_market_open() -> bool:
 # ══════════════════════════════════════════════════════
 
 def render_card(data: dict):
-    """แสดงข้อมูลหุ้น 1 ตัว (ไม่มีชื่อ — อยู่ในปุ่มด้านบนแล้ว)"""
+    """แสดงข้อมูลหุ้น 1 ตัว รวม name header ที่ top"""
+    symbol = data.get("symbol", "")
+
     if "error" in data:
         st.markdown(f"""
-        <div style="background:#161B22;border:1px solid #30363D;border-radius:0 0 8px 8px;
-                    padding:10px 12px;margin:0;min-height:110px">
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px;
+                    padding:10px 12px;margin:0;min-height:144px">
+          <div style="font-weight:700;color:#58A6FF;font-size:0.88rem;margin-bottom:6px">{symbol}</div>
           <span style="color:#F85149;font-size:0.75rem">{data['error']}</span>
         </div>""", unsafe_allow_html=True)
         return
@@ -174,6 +177,23 @@ def render_card(data: dict):
     res    = data.get("resistance")
     s_tp   = data.get("suggest_tp")
     s_sl   = data.get("suggest_sl")
+
+    # ── Name header styling ────────────────────────────
+    if near_d:
+        name_bg     = "#1A3020"
+        name_color  = "#3FB950"
+        name_border = "#3FB950"
+        near_badge  = "<span style='font-size:0.65rem;opacity:0.9'>▲ ใกล้รับ</span>"
+    elif near_s:
+        name_bg     = "#301A1A"
+        name_color  = "#F85149"
+        name_border = "#F85149"
+        near_badge  = "<span style='font-size:0.65rem;opacity:0.9'>▼ ใกล้ต้าน</span>"
+    else:
+        name_bg     = "#1C2128"
+        name_color  = "#58A6FF"
+        name_border = "#30363D"
+        near_badge  = ""
 
     strength_badge = ""
     if sig != "HOLD" and data["strength"] == "STRONG":
@@ -231,22 +251,32 @@ def render_card(data: dict):
         )
 
     st.markdown(f"""
-    <div style="background:{bg_color};border:1px solid {SIG_BORDER[sig]};
-                border-radius:0 0 8px 8px;padding:10px 12px;margin:0;min-height:110px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="background:{SIG_COLOR[sig]};color:{SIG_TEXT[sig]};
-                     padding:2px 7px;border-radius:4px;font-size:0.78rem;font-weight:700">{sig}</span>
-        <span style="font-size:1.05rem;color:#E6EDF3;font-weight:600">
-          {data['price']:,.2f}
-          <span style="font-size:0.76rem;color:{chg_color}">&nbsp;{chg_sign}{chg:.2f}%</span>
-        </span>
+    <div style="margin:0">
+      <div style="background:{name_bg};border:1px solid {name_border};
+                  border-radius:8px 8px 0 0;border-bottom:none;
+                  padding:5px 10px;display:flex;justify-content:space-between;
+                  align-items:center;min-height:34px">
+        <span style="color:{name_color};font-weight:700;font-size:0.88rem">{symbol}</span>
+        <span style="color:{name_color}">{near_badge}</span>
       </div>
-      <div style="font-size:0.71rem;display:flex;gap:10px;margin-top:5px">
-        <span>RSI: <span style="color:{rsi_color};font-weight:600">{rsi:.0f}</span></span>
-        <span>ADX: <span style="color:{adx_color};font-weight:600">{adx:.0f}</span></span>
+      <div style="background:{bg_color};border:1px solid {SIG_BORDER[sig]};
+                  border-top:1px solid {name_border};
+                  border-radius:0 0 8px 8px;padding:10px 12px;min-height:110px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="background:{SIG_COLOR[sig]};color:{SIG_TEXT[sig]};
+                       padding:2px 7px;border-radius:4px;font-size:0.78rem;font-weight:700">{sig}</span>
+          <span style="font-size:1.05rem;color:#E6EDF3;font-weight:600">
+            {data['price']:,.2f}
+            <span style="font-size:0.76rem;color:{chg_color}">&nbsp;{chg_sign}{chg:.2f}%</span>
+          </span>
+        </div>
+        <div style="font-size:0.71rem;display:flex;gap:10px;margin-top:5px">
+          <span>RSI: <span style="color:{rsi_color};font-weight:600">{rsi:.0f}</span></span>
+          <span>ADX: <span style="color:{adx_color};font-weight:600">{adx:.0f}</span></span>
+        </div>
+        {zone_row}
+        {price_row}
       </div>
-      {zone_row}
-      {price_row}
     </div>""", unsafe_allow_html=True)
 
 
@@ -356,31 +386,28 @@ def main():
   .stSelectbox label { color: #8B949E !important; }
   [data-testid="stMetricValue"] { font-size:1.3rem !important; }
   [data-testid="stMetricLabel"] { font-size:0.75rem !important; color:#8B949E !important; }
+  /* button โปร่งใส — ทำหน้าที่ click เท่านั้น ชื่อหุ้นอยู่ใน card HTML แทน */
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
-    background: #1C2128 !important;
-    border: 1px solid #30363D !important;
-    border-bottom: none !important;
-    color: #58A6FF !important;
-    font-weight: 700 !important;
-    font-size: 0.85rem !important;
-    padding: 5px 6px !important;
-    border-radius: 6px 6px 0 0 !important;
-    letter-spacing: 0 !important;
-    margin-bottom: 0 !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: clip !important;
+    background: transparent !important;
+    border: none !important;
+    color: transparent !important;
+    height: 34px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: pointer !important;
     width: 100% !important;
+    box-shadow: none !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button:hover {
-    background: #21262D !important;
-    border-color: #58A6FF !important;
-    border-bottom: none !important;
-    color: #79C0FF !important;
+    background: rgba(255,255,255,0.06) !important;
+    border: none !important;
+    color: transparent !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
-    margin-bottom: -16px !important;
+    margin-bottom: -34px !important;
     padding-bottom: 0 !important;
+    position: relative !important;
+    z-index: 5 !important;
   }
   div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] { gap: 0 !important; }
   div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] { gap: 0 !important; }
@@ -538,26 +565,6 @@ def main():
                    if all_data.get(s, {}).get("near_demand") or all_data.get(s, {}).get("near_supply")]
     else:
         display = list(config.WATCHLIST)
-
-    # ── inject CSS highlight สำหรับหุ้นใกล้ zone ─────────
-    zone_css = ""
-    for sym, d in all_data.items():
-        if d.get("near_demand"):
-            zone_css += (
-                f'button[aria-label="{sym}"] {{'
-                f'background:#1A3020 !important;'
-                f'border-color:#3FB950 !important;'
-                f'color:#3FB950 !important;}}'
-            )
-        elif d.get("near_supply"):
-            zone_css += (
-                f'button[aria-label="{sym}"] {{'
-                f'background:#301A1A !important;'
-                f'border-color:#F85149 !important;'
-                f'color:#F85149 !important;}}'
-            )
-    if zone_css:
-        st.markdown(f"<style>{zone_css}</style>", unsafe_allow_html=True)
 
     if not display:
         st.info(f"ไม่มีหุ้นที่ตรงกับ filter '{filter_opt}' ขณะนี้")
