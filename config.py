@@ -71,7 +71,7 @@ SETTRADE_APP_CODE   = os.getenv("SETTRADE_APP_CODE", "")
 SETTRADE_BROKER_ID  = os.getenv("SETTRADE_BROKER_ID", "")
 
 # ── Real-time mode settings ────────────────────────────
-REALTIME_INTERVAL    = "5"
+REALTIME_INTERVAL    = "5m"
 REALTIME_LIMIT       = 300
 REALTIME_REFRESH_SEC = 60
 

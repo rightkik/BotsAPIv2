@@ -4,13 +4,11 @@ data/settrade_fetcher.py — ดึง OHLCV จาก Settrade Open API (real-t
 ต้องตั้งค่าใน .env:
   SETTRADE_APP_ID, SETTRADE_APP_SECRET, SETTRADE_APP_CODE, SETTRADE_BROKER_ID
 
-Sandbox: ตั้ง SETTRADE_BROKER_ID=SANDBOX → ใช้ UAT environment อัตโนมัติ
+Sandbox: ตั้ง BROKER_ID=SANDBOX, APP_CODE=SANDBOX → ใช้ UAT environment อัตโนมัติ
 
-API:
-  get_candlestick(symbol, interval, limit)
-    interval: "1","5","15","30","60" = นาที | "D" = รายวัน | "W" = รายสัปดาห์
-  get_quote_symbol(symbol)
-    ราคา bid/offer/last แบบ real-time
+API interval ที่ใช้ได้:
+  "1m","5m","15m","30m","60m" = intraday | "1d" = รายวัน | "1w" = รายสัปดาห์
+  Response format: dict คอลัมน์ขนาน {time:[], open:[], high:[], low:[], close:[], volume:[]}
 """
 
 from typing import Optional
@@ -25,6 +23,9 @@ BKK = ZoneInfo("Asia/Bangkok")
 # SET index ไม่มีใน Settrade — ข้ามในโหมด real-time
 _SKIP_SYMBOLS = {"SET"}
 
+# module-level cache — login ครั้งเดียวต่อ process
+_cached_investor = None
+
 
 def has_credentials() -> bool:
     """ตรวจว่า Settrade credentials ครบพอ login ได้"""
@@ -37,65 +38,45 @@ def has_credentials() -> bool:
 
 
 def _make_investor():
-    """สร้าง Investor จาก credentials ใน .env (login ตอนสร้าง)"""
-    from settrade_v2 import Investor
-
+    """คืน Investor ที่ login แล้ว — ใช้ instance เดิมถ้ามีอยู่แล้ว"""
+    global _cached_investor
     if not has_credentials():
         raise ValueError("Settrade credentials ไม่ครบ — ตั้งค่าใน .env ก่อน")
-
-    return Investor(
-        app_id=config.SETTRADE_APP_ID,
-        app_secret=config.SETTRADE_APP_SECRET,
-        app_code=config.SETTRADE_APP_CODE,
-        broker_id=config.SETTRADE_BROKER_ID,
-    )
+    if _cached_investor is None:
+        from settrade_v2 import Investor
+        _cached_investor = Investor(
+            app_id=config.SETTRADE_APP_ID,
+            app_secret=config.SETTRADE_APP_SECRET,
+            app_code=config.SETTRADE_APP_CODE,
+            broker_id=config.SETTRADE_BROKER_ID,
+        )
+    return _cached_investor
 
 
 def _parse_candlestick(raw: dict) -> Optional[pd.DataFrame]:
     """
-    แปลง response dict จาก get_candlestick → DataFrame
-    รองรับ format ที่ Settrade API คืนมา 2 แบบ:
-      - key "candlesticks" หรือ "data" → list of candle dicts
-      - candle field names: time/datetime + open/o, high/h, low/l, close/c, volume/v
+    แปลง response จาก get_candlestick → DataFrame
+    Settrade API คืน columnar dict: {time:[], open:[], high:[], low:[], close:[], volume:[]}
     """
-    # หา list ของแท่งเทียน
-    candles = None
-    for key in ("candlesticks", "data", "result"):
-        if key in raw and isinstance(raw[key], list):
-            candles = raw[key]
-            break
-    if candles is None and isinstance(raw, list):
-        candles = raw
-    if not candles:
+    if not isinstance(raw, dict):
         return None
 
-    df = pd.DataFrame(candles)
-
-    # normalize column names
-    rename = {
-        "datetime": "time",
-        "o": "open",  "h": "high",  "l": "low",
-        "c": "close", "v": "volume",
-    }
-    df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
-
-    if "time" not in df.columns:
+    times = raw.get("time")
+    if not isinstance(times, list) or not times:
         return None
-
-    # แปลง timestamp → DatetimeIndex Asia/Bangkok
-    sample = df["time"].iloc[0]
-    if isinstance(sample, (int, float)):
-        # Unix ms
-        df.index = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(BKK)
-    else:
-        df.index = pd.to_datetime(df["time"]).dt.tz_localize(BKK, nonexistent="shift_forward")
-
-    df = df.drop(columns=["time"])
 
     needed = ["open", "high", "low", "close", "volume"]
-    missing = [c for c in needed if c not in df.columns]
-    if missing:
+    if any(k not in raw for k in needed):
         return None
+
+    df = pd.DataFrame({k: raw[k] for k in ["open", "high", "low", "close", "volume"]})
+
+    # แปลง timestamp → DatetimeIndex Asia/Bangkok
+    sample = times[0]
+    if isinstance(sample, (int, float)):
+        df.index = pd.to_datetime(times, unit="ms", utc=True).dt.tz_convert(BKK)
+    else:
+        df.index = pd.to_datetime(times).dt.tz_localize(BKK, nonexistent="shift_forward")
 
     df = df[needed].astype(float)
     df["volume"] = df["volume"].fillna(0.0)
@@ -161,17 +142,39 @@ def fetch_all_st(
 
 
 def get_quote(symbol: str) -> Optional[dict]:
-    """
-    ดึงราคา real-time ล่าสุด 1 symbol
-    คืน dict จาก API หรือ None ถ้าล้มเหลว
-    ใช้สำหรับแสดงราคาปัจจุบันในหน้า dashboard
-    """
+    """ดึงราคา real-time 1 symbol — คืน dict หรือ None ถ้าล้มเหลว"""
     if symbol in _SKIP_SYMBOLS:
         return None
-
     try:
-        investor = _make_investor()
-        market   = investor.MarketData()
+        market = _make_investor().MarketData()
         return market.get_quote_symbol(symbol)
     except Exception:
         return None
+
+
+def fetch_quotes_all(symbols: list = None) -> dict:
+    """
+    Batch fetch real-time quote ทุก symbol — login ครั้งเดียว
+    คืน dict {symbol: {"price": float, "price_chg_pct": float}}
+    symbol ที่ดึงไม่ได้หรือ last=None จะไม่อยู่ใน dict (ให้ caller ใช้ yfinance แทน)
+    """
+    symbols = symbols or [s for s in config.WATCHLIST if s not in _SKIP_SYMBOLS]
+    try:
+        market = _make_investor().MarketData()
+    except Exception:
+        return {}
+
+    result = {}
+    for symbol in symbols:
+        try:
+            q = market.get_quote_symbol(symbol)
+            last = q.get("last") if q else None
+            pct  = q.get("percentChange") if q else None
+            if last is not None:
+                result[symbol] = {
+                    "price":         float(last),
+                    "price_chg_pct": float(pct) if pct is not None else 0.0,
+                }
+        except Exception:
+            continue
+    return result

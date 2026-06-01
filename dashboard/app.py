@@ -23,7 +23,7 @@ import config
 from bot.indicator import add_all_indicators, find_supply_demand_zones
 from bot.strategy  import get_signal
 from data.fetcher  import fetch_all
-from data.settrade_fetcher import fetch_all_st, has_credentials
+from data.settrade_fetcher import fetch_quotes_all, has_credentials
 
 # ══════════════════════════════════════════════════════
 # GitHub API
@@ -177,9 +177,20 @@ def load_signals_daily():
 
 @st.cache_data(ttl=config.REALTIME_REFRESH_SEC)
 def load_signals_realtime():
-    """Real-time mode — ดึงข้อมูลจาก Settrade (cache 1 นาที, ข้าม SET index)"""
-    watchlist = [s for s in config.WATCHLIST if s != "SET"]
-    return _build_results(fetch_all_st(), watchlist)
+    """Hybrid mode — OHLCV + signal จาก yfinance, ราคาบน card จาก Settrade get_quote()"""
+    ohlcv_map = fetch_all()
+    htf_map   = fetch_all(interval=config.TIMEFRAME_HTF, period=config.HTF_PERIOD)
+    results   = _build_results(ohlcv_map, list(config.WATCHLIST), htf_map=htf_map)
+
+    # override ราคา + %chg ด้วย Settrade real-time — ถ้าดึงไม่ได้ใช้ yfinance เดิม
+    quotes = fetch_quotes_all()
+    for symbol, data in results.items():
+        if "error" in data or symbol not in quotes:
+            continue
+        data["price"]         = quotes[symbol]["price"]
+        data["price_chg_pct"] = quotes[symbol]["price_chg_pct"]
+
+    return results
 
 
 def is_market_open() -> bool:
