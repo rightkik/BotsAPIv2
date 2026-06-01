@@ -609,6 +609,71 @@ NOT YET RESOLVED:
     ⏳ Settrade sandbox credentials (รอจากโบรกเกอร์)
     ❌ LINE Notify integration
 
+--------------------------------------------------------------------------------
+[2026-06-01]  Session 14 — Settrade API Integration + Hybrid Real-time Mode
+--------------------------------------------------------------------------------
+COMPLETED:
+
+  SETTRADE API — Credentials & Connection:
+    - ค้นพบ credentials ถูกต้องจาก developer.settrade.com
+        APP_ID     = hOAc5mzLISk4eaFF  (ไม่ใช่ p7KYCinOXIRKurCf ที่บันทึกผิดไว้)
+        APP_SECRET = MNuGPaNg+sN6RopDv4S86teepSYJVM5ERvSka36u7C8=
+        APP_CODE   = SANDBOX  (จากหน้า portal — Broker ID: SANDBOX, App Code: SANDBOX)
+        BROKER_ID  = SANDBOX
+    - settrade-v2==2.2.1 ติดตั้งแล้ว (local), login สำเร็จ
+    - get_quote() ทำงาน — คืนราคาจริง (PTT=38.0, KBANK=199.0 ฯลฯ)
+    - SANDBOX candlestick = empty arrays (ปกติ — production SBI ถึงจะมีข้อมูล)
+
+  SETTRADE API — Valid Intervals (ค้นหาด้วยการทดสอบจริง):
+    ✅ 1m, 5m, 15m, 30m, 60m, 1d, 1w
+    ❌ "D", "W", "5", "15", "60", "1h" (format เก่าใช้ไม่ได้)
+
+  settrade_fetcher.py — รีไรท์:
+    - _parse_candlestick(): เขียนใหม่รองรับ columnar format จริงของ API
+        API คืน {time:[], open:[], high:[], low:[], close:[], volume:[]}
+        ไม่ใช่ list of dicts อย่างที่เข้าใจผิดไว้
+    - _make_investor(): เพิ่ม module-level cache (_cached_investor)
+        login ครั้งเดียวต่อ process ไม่ login ซ้ำทุก request
+    - fetch_quotes_all(): batch fetch real-time quote ทุก symbol
+        ใช้ investor + MarketData instance เดิม (efficient)
+        คืน {symbol: {price, price_chg_pct}} เฉพาะที่มีข้อมูล
+    - get_quote(): ปรับใช้ investor cache
+
+  config.py:
+    - REALTIME_INTERVAL: "5" → "5m"  (format ถูกต้อง)
+
+  dashboard/app.py — Hybrid Real-time Mode:
+    - load_signals_realtime() เปลี่ยนจาก fetch_all_st() เป็น Hybrid:
+        OHLCV + signal คำนวณจาก yfinance daily (เหมือน Daily mode)
+        ราคาบน card override ด้วย Settrade get_quote() real-time
+        fallback rules:
+          SET          → ใช้ yfinance เสมอ (ไม่มีใน Settrade)
+          symbol ที่ Settrade ไม่มีข้อมูล → ใช้ yfinance เดิม
+          symbol ที่ Settrade มีข้อมูล → override price + price_chg_pct ด้วยกันเสมอ
+
+  DEPLOYMENT:
+    - push ขึ้น GitHub (commit: 4e20a36)
+    - เพิ่ม Settrade secrets ใน Streamlit Cloud:
+        SETTRADE_APP_ID, SETTRADE_APP_SECRET, SETTRADE_APP_CODE, SETTRADE_BROKER_ID
+
+ISSUES RESOLVED:
+  - .env มี BOM + CRLF encoding ทำให้ Read tool แสดงเนื้อหาผิด
+    → ใช้ python open(...,'rb') อ่าน raw bytes เพื่อดูเนื้อหาจริง
+  - APP_CODE พบว่าต้องใช้ "SANDBOX" ไม่ใช่ username/password/broker_code
+  - SANDBOX batch quote (27 symbols) ใช้เวลา ~25 วิ (server ช้า)
+    → ไม่เป็นปัญหาเพราะ st.cache_data(ttl=60) cache ผล 1 นาที
+
+KNOWN LIMITATIONS:
+  - Real-time chart (intraday candlestick) ยังไม่ได้ — SANDBOX ไม่มี OHLCV data
+    → ต้องรอ production app_code จากโบรกเกอร์ SBI
+  - ราคา real-time อัพเดททุก 60 วิ (REST pull) ไม่ใช่ tick-by-tick streaming
+  - Investor token จะหมดอายุ → silently fallback ไป yfinance price (by design)
+
+NOT YET BUILT:
+  ⏳ Production SBI app_code → intraday candlestick (รอติดต่อโบรกเกอร์)
+  ❌ LINE Notify integration
+  ❌ Alert history table / market heatmap (Phase SET-3)
+
 ================================================================================
   END OF LOG
 ================================================================================
