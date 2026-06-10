@@ -1,0 +1,32 @@
+name: Fetch Fundamentals
+
+on:
+  schedule:
+    - cron: '0 1 * * 1-5'   # 08:00 BKK (UTC+7) วันจันทร์-ศุกร์
+  workflow_dispatch:          # กดรันเองได้จาก GitHub Actions tab
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas python-dotenv
+
+      - name: Fetch fundamentals
+        run: python scripts/fetch_fundamentals.py
+
+      - name: Commit cache file
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: 'data/cache/fundamentals.json'
+          message: 'data: update fundamentals cache'
+          default_author: github_actions

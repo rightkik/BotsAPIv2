@@ -1,3 +1,5 @@
+import json
+import os
 import time
 
 import pandas as pd
@@ -6,16 +8,42 @@ import yfinance as yf
 
 from .fetcher import to_yf
 
+_CACHE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "cache", "fundamentals.json",
+)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_cache_file() -> dict:
+    """โหลด fundamentals.json ที่ GitHub Actions commit ไว้ (cache 5 นาที)"""
+    try:
+        with open(_CACHE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def get_cache_updated() -> str:
+    """คืนวันที่อัปเดตล่าสุด หรือ '' ถ้าไม่มี cache"""
+    return _load_cache_file().get("_updated", "")
+
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def get_fundamentals(symbol: str) -> dict:
-    """คืน yfinance .info dict — raise Exception เมื่อ fail (ไม่ cache ผล error)"""
+    """คืน fundamental dict — อ่านจาก cache file ก่อน, fallback live"""
     if symbol == "SET":
         return {}
+
+    cache = _load_cache_file()
+    if symbol in cache:
+        return cache[symbol]
+
+    # fallback: live fetch (อาจ rate-limit บน cloud)
     last_exc: Exception = RuntimeError("unknown error")
     for attempt in range(3):
         if attempt > 0:
-            time.sleep(2 ** attempt)  # 2s, 4s
+            time.sleep(2 ** attempt)
         try:
             info = yf.Ticker(to_yf(symbol)).info or {}
             if len(info) >= 5:

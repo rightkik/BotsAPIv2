@@ -9,7 +9,7 @@
 data/logs/*.csv
 data/logs/*.json
 data/logs/*.jsonl
-data/cache/
+data/cache/signals.json
 
 # Temp log files จากการทดสอบ
 *.log

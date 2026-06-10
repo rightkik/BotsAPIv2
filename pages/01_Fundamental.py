@@ -10,7 +10,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import config
-from data.fundamental import get_dividend_history, get_fundamentals
+from data.fundamental import get_cache_updated, get_dividend_history, get_fundamentals
 
 # ── Page Config ───────────────────────────────────────
 st.set_page_config(
@@ -45,6 +45,13 @@ st.markdown(
 )
 
 stocks = [s for s in config.WATCHLIST if s != "SET"]
+
+updated = get_cache_updated()
+updated_str = (
+    f"cache อัปเดต: {updated.replace('T', ' ').replace('Z', ' UTC')}"
+    if updated else "⚠️ ยังไม่มี cache — กำลังดึงข้อมูล live"
+)
+st.caption(updated_str)
 
 col_sym, col_btn, _ = st.columns([2, 1, 5])
 with col_sym:
