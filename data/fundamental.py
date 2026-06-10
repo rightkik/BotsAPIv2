@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -7,16 +9,21 @@ from .fetcher import to_yf
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def get_fundamentals(symbol: str) -> dict:
+    """คืน yfinance .info dict — raise Exception เมื่อ fail (ไม่ cache ผล error)"""
     if symbol == "SET":
         return {}
-    try:
-        ticker = yf.Ticker(to_yf(symbol))
-        info = ticker.info or {}
-        if not info or len(info) < 5:
-            return {"_error": "Yahoo Finance ไม่คืนข้อมูล — อาจถูก rate-limit หรือ ticker ไม่ถูกต้อง"}
-        return info
-    except Exception as e:
-        return {"_error": str(e)}
+    last_exc: Exception = RuntimeError("unknown error")
+    for attempt in range(3):
+        if attempt > 0:
+            time.sleep(2 ** attempt)  # 2s, 4s
+        try:
+            info = yf.Ticker(to_yf(symbol)).info or {}
+            if len(info) >= 5:
+                return info
+            last_exc = ValueError(f"Yahoo Finance คืนข้อมูลไม่ครบสำหรับ {symbol}")
+        except Exception as e:
+            last_exc = e
+    raise last_exc
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner=False)

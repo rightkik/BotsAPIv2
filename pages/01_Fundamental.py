@@ -58,13 +58,15 @@ with col_btn:
 st.markdown("---")
 
 # ── Load Data ─────────────────────────────────────────
-with st.spinner(f"กำลังโหลด {symbol}..."):
-    info = get_fundamentals(symbol)
-    divs = get_dividend_history(symbol)
-
-if not info or info.get("_error"):
-    err_msg = info.get("_error", "ไม่ทราบสาเหตุ") if info else "ไม่ได้รับข้อมูลจาก Yahoo Finance"
-    st.warning(f"โหลดข้อมูล {symbol} ไม่สำเร็จ: {err_msg}")
+info: dict = {}
+divs_error = False
+try:
+    with st.spinner(f"กำลังโหลด {symbol}..."):
+        info = get_fundamentals(symbol)
+        divs = get_dividend_history(symbol)
+except Exception as e:
+    st.warning(f"โหลดข้อมูล {symbol} ไม่สำเร็จ: {e}")
+    st.caption("Yahoo Finance อาจ rate-limit IP ของ cloud server — รออีกสักครู่แล้วลองใหม่")
     if st.button("🔄 ลองใหม่"):
         get_fundamentals.clear()
         get_dividend_history.clear()
