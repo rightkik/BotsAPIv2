@@ -674,6 +674,113 @@ NOT YET BUILT:
   ❌ LINE Notify integration
   ❌ Alert history table / market heatmap (Phase SET-3)
 
+--------------------------------------------------------------------------------
+[2026-06-10]  Session 15 — Fundamental Data Page (Research + Architecture)
+--------------------------------------------------------------------------------
+CONTEXT:
+  - ต่อจาก Session 14 (Hybrid real-time mode ทำงานแล้ว)
+  - User ต้องการเพิ่มหน้า Fundamental Data แยกต่างหากใน dashboard
+
+RESEARCH — แหล่งข้อมูล Fundamental สำหรับหุ้น SET:
+  yfinance .info (เลือกใช้ Phase 1):
+    - ดึงได้ทันที ไม่ต้องสมัคร API ใหม่
+    - Fields: trailingPE, forwardPE, trailingEps, dividendYield, marketCap,
+              totalRevenue, revenuePerShare, returnOnEquity, debtToEquity,
+              currentRatio, sector, industry, longBusinessSummary, mostRecentQuarter
+    - ข้อเสีย: ล่าช้า 1-4 สัปดาห์ สำหรับ large cap, อาจว่างสำหรับ small cap
+    - dividendYield คืนเป็น decimal (0.04 = 4%) → ต้อง ×100 เพื่อแสดง
+
+  ทางเลือกอื่นที่ Research ไว้ (Phase 2+ ถ้าจำเป็น):
+    - Finnhub: Free 60 calls/min, มี SET coverage — ยังไม่ทดสอบจริง
+    - SET Website: JavaScript rendering + 403 บน direct API call → ต้อง Selenium
+    - iTick API: ฟรีพื้นฐาน / ~$50/เดือนสำหรับ financials
+    - SET SMART Marketplace: Official แต่ต้อง SETSMART membership
+    - market.sec.or.th: XBRL format, ซับซ้อน
+
+ARCHITECTURE DECISION — Multi-page Streamlit:
+  ปัญหา: pages/ ต้องอยู่ข้างๆ script ที่รัน ไม่ใช่ข้างๆ main()
+    - streamlit_app.py อยู่ที่ root → pages/ ต้องอยู่ที่ root
+    - dashboard/app.py เป็น local runner → dashboard/pages/ ใช้ได้ local แต่ invisible บน cloud
+  ผลลัพธ์ที่ถูกต้อง:
+    - สร้าง pages/01_Fundamental.py ที่ ROOT (ข้างๆ streamlit_app.py)
+    - อัปเดต run_dashboard.bat: dashboard\app.py → streamlit_app.py
+    - ใช้ data/fundamental.py เป็น data layer (เพิ่มใหม่)
+
+PLAN สำหรับ fundamental page (ยังไม่ได้ implement):
+  ไฟล์ใหม่ที่ต้องสร้าง:
+    data/fundamental.py
+      - get_fundamentals(symbol)  : @st.cache_data(ttl=6h), คืน .info dict
+      - get_dividend_history(symbol): @st.cache_data(ttl=24h), คืน DataFrame
+      - ใช้ to_yf() จาก data/fetcher.py (relative import)
+      - SET index → คืน {} ทันที (ไม่มี fundamentals)
+
+    pages/01_Fundamental.py  (ที่ root)
+      - Dark theme CSS: #0D1117 / #58A6FF / #E6EDF3 (เดียวกับ app.py)
+      - Symbol selector จาก config.WATCHLIST (ยกเว้น SET index)
+      - ปุ่ม "รีเฟรช" (clear cache + reload)
+      - Sections: Company Overview → Financial Ratios → Revenue & Profitability
+                 → Dividends → Dividend History bar chart
+      - Disclaimer: "ข้อมูลอาจล่าช้า 1-4 สัปดาห์"
+      - แสดง mostRecentQuarter (timestamp → วันที่) เพื่อบอก freshness
+
+  ไฟล์ที่ต้องแก้:
+    run_dashboard.bat: เปลี่ยน dashboard\app.py → streamlit_app.py
+
+STATUS: Research + Architecture เสร็จ, Implementation ยังไม่ได้เริ่ม (interrupted)
+
+COMPLETED (Session 15 — implementation):
+  ✅ data/fundamental.py           : get_fundamentals() + get_dividend_history()
+  ✅ pages/01_Fundamental.py       : หน้า Fundamental Data ที่ root
+  ✅ run_dashboard.bat             : เปลี่ยนเป็น streamlit_app.py
+
+NOTES:
+  - dividendYield จาก yfinance คืนเป็น % แล้ว (6.09 = 6.09%) ไม่ต้อง ×100
+    ต่างจาก payoutRatio/profitMargins/returnOnEquity ที่ยังเป็น decimal
+  - pages/ ต้องอยู่ที่ root (ข้างๆ streamlit_app.py) — Streamlit Cloud detect ถูกต้อง
+
+--------------------------------------------------------------------------------
+[2026-06-10]  Session 16 — Fundamental Page: Implementation
+--------------------------------------------------------------------------------
+COMPLETED:
+
+  data/fundamental.py (NEW):
+    - get_fundamentals(symbol)      : @st.cache_data(ttl=6h), คืน yfinance .info dict
+    - get_dividend_history(symbol)  : @st.cache_data(ttl=24h), คืน dividend DataFrame 5 ปีล่าสุด
+    - SET index → คืน {} / empty DataFrame ทันที
+    - relative import: from .fetcher import to_yf
+
+  pages/01_Fundamental.py (NEW — ที่ root):
+    - Dark theme CSS: #0D1117 / #58A6FF / #E6EDF3 (เหมือน dashboard/app.py)
+    - Symbol selector จาก config.WATCHLIST (ยกเว้น SET)
+    - ปุ่ม รีเฟรช → clear cache ทั้ง 2 function + st.rerun()
+    - Sections:
+        🏢 Company Overview  : sector, industry, marketCap, mostRecentQuarter (freshness)
+        📐 Financial Ratios  : P/E trailing/forward, EPS, P/B
+        📈 Revenue & Profitability : Revenue, Revenue/Share, Profit Margin
+        ⚖️  Balance Sheet     : ROE, Debt/Equity, Current Ratio
+        💰 Dividends         : yield, rate, payout, ex-date
+        📊 Dividend History  : bar chart Plotly (5 ปีล่าสุด)
+    - Disclaimer footer
+    - expandable company summary (800 chars)
+
+  run_dashboard.bat (UPDATED):
+    - dashboard\app.py → streamlit_app.py
+
+TESTED:
+  ✅ import data.fundamental → ผ่าน
+  ✅ KBANK: yield=6.09%, payout=47.17%, margin=32.56%, ROE=8.53%, data ณ 31 Mar 2026
+  ✅ dividend history 11 rows (5 ปีล่าสุด)
+  ✅ Streamlit server start ไม่มี error
+
+DISCOVERY:
+  dividendYield จาก yfinance ≥ 1.0 = % แล้ว (ไม่ใช่ decimal 0.04)
+  ต่างจากที่ dev_log Session 15 research บันทึกไว้ — แก้แล้วใน code
+
+NOT YET BUILT:
+  ❌ LINE Notify integration
+  ❌ Alert history table / market heatmap (Phase SET-3)
+  ⏳ Production SBI app_code (รอโบรกเกอร์)
+
 ================================================================================
   END OF LOG
 ================================================================================
