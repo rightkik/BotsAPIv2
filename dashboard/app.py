@@ -675,24 +675,13 @@ def main():
     st.divider()
     fl, fr = st.columns([3, 1])
     with fl:
-        refresh_min = config.REALTIME_REFRESH_SEC // 60 \
-                      if st.session_state.data_mode == "realtime" \
-                      else config.DASHBOARD_REFRESH_SEC // 60
         mode_tag = "⚡ Real-time (Settrade)" if st.session_state.data_mode == "realtime" \
                    else "📊 Daily (yfinance)"
-        st.caption(f"อัพเดทล่าสุด: {now_str} | {mode_tag} | Auto-refresh ทุก {refresh_min} นาที")
+        st.caption(f"อัพเดทล่าสุด: {now_str} | {mode_tag}")
     with fr:
-        if st.button("🔄 Refresh ตอนนี้", key="refresh_btn"):
+        if st.button("🔄 Refresh", key="refresh_btn"):
             st.cache_data.clear()
             st.rerun()
-
-    refresh_sec = config.REALTIME_REFRESH_SEC \
-                  if st.session_state.data_mode == "realtime" \
-                  else config.DASHBOARD_REFRESH_SEC
-    st.markdown(
-        f"<meta http-equiv='refresh' content='{refresh_sec}'>",
-        unsafe_allow_html=True,
-    )
 
 
 if __name__ == "__main__":
