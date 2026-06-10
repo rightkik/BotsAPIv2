@@ -12,9 +12,11 @@ def get_fundamentals(symbol: str) -> dict:
     try:
         ticker = yf.Ticker(to_yf(symbol))
         info = ticker.info or {}
+        if not info or len(info) < 5:
+            return {"_error": "Yahoo Finance ไม่คืนข้อมูล — อาจถูก rate-limit หรือ ticker ไม่ถูกต้อง"}
         return info
-    except Exception:
-        return {}
+    except Exception as e:
+        return {"_error": str(e)}
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner=False)

@@ -62,8 +62,13 @@ with st.spinner(f"กำลังโหลด {symbol}..."):
     info = get_fundamentals(symbol)
     divs = get_dividend_history(symbol)
 
-if not info:
-    st.warning(f"ไม่พบข้อมูล fundamental สำหรับ {symbol}")
+if not info or info.get("_error"):
+    err_msg = info.get("_error", "ไม่ทราบสาเหตุ") if info else "ไม่ได้รับข้อมูลจาก Yahoo Finance"
+    st.warning(f"โหลดข้อมูล {symbol} ไม่สำเร็จ: {err_msg}")
+    if st.button("🔄 ลองใหม่"):
+        get_fundamentals.clear()
+        get_dividend_history.clear()
+        st.rerun()
     st.stop()
 
 # ── Helpers ───────────────────────────────────────────
