@@ -54,6 +54,28 @@ def get_fundamentals(symbol: str) -> dict:
     raise last_exc
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_price_history(symbol: str, period: str = "3mo") -> pd.DataFrame:
+    """OHLCV ย้อนหลัง พร้อมคอลัมน์ change และ change_pct (vs close วันก่อน)"""
+    if symbol == "SET":
+        period = "6mo"
+    try:
+        import yfinance as yf
+        df = yf.download(to_yf(symbol), period=period, interval="1d",
+                         progress=False, auto_adjust=True)
+        if df.empty:
+            return pd.DataFrame()
+        df.columns = [c.lower() if isinstance(c, str) else c[0].lower()
+                      for c in df.columns]
+        df = df[["open", "high", "low", "close", "volume"]].astype(float)
+        df["change"]     = df["close"].diff()
+        df["change_pct"] = df["close"].pct_change() * 100
+        df = df.dropna(subset=["change"]).sort_index(ascending=False)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=24 * 3600, show_spinner=False)
 def get_dividend_history(symbol: str) -> pd.DataFrame:
     if symbol == "SET":

@@ -10,7 +10,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import config
-from data.fundamental import get_cache_updated, get_dividend_history, get_fundamentals
+from data.fundamental import get_cache_updated, get_dividend_history, get_fundamentals, get_price_history
 
 # ── Page Config ───────────────────────────────────────
 st.set_page_config(
@@ -229,6 +229,74 @@ if not divs.empty:
         height=300,
     )
     st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# ── Price History Table ───────────────────────────────
+st.markdown(
+    "<div style='color:#58A6FF;font-size:0.95rem;font-weight:700;margin-bottom:10px'>"
+    "📅 ราคาย้อนหลัง (3 เดือน)</div>",
+    unsafe_allow_html=True,
+)
+
+with st.spinner("โหลดราคาย้อนหลัง..."):
+    ph = get_price_history(symbol)
+
+if ph.empty:
+    st.caption("ไม่พบข้อมูลราคาย้อนหลัง")
+else:
+    def _vol_str(v: float) -> str:
+        if v >= 1_000_000:
+            return f"{v/1_000_000:.2f}M"
+        if v >= 1_000:
+            return f"{v/1_000:.0f}K"
+        return f"{v:.0f}"
+
+    rows_html = ""
+    for date, row in ph.iterrows():
+        chg     = row["change"]
+        chg_pct = row["change_pct"]
+        if chg > 0:
+            color = "#3FB950"
+            sign  = "+"
+        elif chg < 0:
+            color = "#F85149"
+            sign  = ""
+        else:
+            color = "#8B949E"
+            sign  = ""
+
+        date_str = date.strftime("%d %b %Y") if hasattr(date, "strftime") else str(date)[:10]
+        rows_html += (
+            f"<tr>"
+            f"<td style='padding:5px 10px;color:#8B949E'>{date_str}</td>"
+            f"<td style='padding:5px 10px;text-align:right'>{row['open']:,.2f}</td>"
+            f"<td style='padding:5px 10px;text-align:right;font-weight:600'>{row['close']:,.2f}</td>"
+            f"<td style='padding:5px 10px;text-align:right;color:{color}'>{sign}{chg:,.2f}</td>"
+            f"<td style='padding:5px 10px;text-align:right;color:{color}'>{sign}{chg_pct:.2f}%</td>"
+            f"<td style='padding:5px 10px;text-align:right;color:#8B949E'>{_vol_str(row['volume'])}</td>"
+            f"</tr>"
+        )
+
+    table_html = f"""
+    <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;color:#E6EDF3">
+      <thead>
+        <tr style="background:#161B22;position:sticky;top:0">
+          <th style="padding:7px 10px;text-align:left;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">วันที่</th>
+          <th style="padding:7px 10px;text-align:right;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">เปิด</th>
+          <th style="padding:7px 10px;text-align:right;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">ปิด</th>
+          <th style="padding:7px 10px;text-align:right;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">เปลี่ยนแปลง</th>
+          <th style="padding:7px 10px;text-align:right;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">%</th>
+          <th style="padding:7px 10px;text-align:right;color:#8B949E;font-weight:600;border-bottom:1px solid #30363D">ปริมาณ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows_html}
+      </tbody>
+    </table>
+    </div>"""
+    st.markdown(table_html, unsafe_allow_html=True)
 
 # ── Disclaimer ────────────────────────────────────────
 st.markdown(
